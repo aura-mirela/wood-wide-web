@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 02 — Meet the mushroom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <a href="01-the-forest-at-night.html">← Lesson 01</a>
+  <span class="spacer"></span>
+  <a href="03-follow-the-spores.html">Lesson 03 →</a>
+</nav>
+<main>
+  <p class="meta">Tracks: procedural modelling (lathe), GLSL (fresnel, spots), UI/UX (info panel, hover affordance)</p>
+  <h1>Lesson 02 — Meet the mushroom</h1>
+  <p class="episode"><strong>Episode 2: Click the mushroom.</strong> Tap the Fly Agaric to reveal its identity — a card with its classification, and the mushroom answers with light.</p>
+
+  <h2>Concepts</h2>
+  <ul>
+    <li><strong>LatheGeometry = pottery.</strong> You define a 2D profile (array of <code>Vector2</code>, x = radius, y = height) and three.js spins it around the Y axis. One profile curve gives you stem + cap in a single surface. Gills can be a second, inner lathe with a wavy radius.</li>
+    <li><strong>The red cap with white spots, procedurally.</strong> In the fragment shader: base red, then white spots where a <em>cellular/worley-ish</em> pattern crosses a threshold (or: dot the surface with N random points passed as a uniform array and whiten within a radius — simpler, fine for ~20 spots).</li>
+    <li><strong>Fresnel rim light</strong> is the single highest-value trick in this whole project: <code>pow(1.0 - dot(viewDir, normal), p)</code> makes edges glow. It is the "this thing is magical/alive" signal, and later the hover affordance.</li>
+    <li><strong>Raycasting is free in R3F.</strong> <code>onClick</code> / <code>onPointerOver</code> on a mesh just work. Understand what happens underneath: a ray from the camera through the pointer, intersected against the mesh's triangles.</li>
+    <li><strong>UX of discoverability.</strong> The user must <em>suspect</em> the mushroom is clickable: idle pulse (subtle emissive breathing), hover response (fresnel brightens, cursor becomes pointer), click response (flash + panel). Three tiers, each stronger than the last.</li>
+    <li><strong>Info panel.</strong> Two options — drei's <code>&lt;Html&gt;</code> anchors DOM to a 3D point (panel follows the mushroom), or a fixed overlay (<code>position: fixed</code>, like the storyboard's card). The card itself is pure CSS: <code>backdrop-filter: blur()</code>, translucent dark background, 1px light border, slide+fade entrance via a <code>@keyframes</code> or transition on mount.</li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Sketch the profile on paper first: stem radius ~0.3, bulge at base, flare into a cap. Turn it into <code>Vector2[]</code> → <code>&lt;latheGeometry args={[points, 48]} /&gt;</code>. Iterate with OrbitControls until the silhouette is right.</li>
+    <li>Material: start <code>meshStandardMaterial</code> red to check the shape, then swap to your shader: red base + white spots + fresnel rim + warm subsurface-ish gradient near the gills (fake it: brighten where <code>normal.y &lt; 0</code>).</li>
+    <li>A warm <code>pointLight</code> inside the cap sells "glowing from within".</li>
+    <li>Interaction states as React state: <code>idle | hover | active</code>. Drive a single <code>uGlow</code> uniform (0 / 0.4 / 1) and <strong>lerp it every frame</strong> toward the target (<code>uGlow += (target - uGlow) * delta * speed</code>) so transitions feel organic. This lerp-toward-target pattern will drive <em>every</em> transition in the project.</li>
+    <li>The card: species name, Latin name, one-line role in the ecosystem (storyboard: "Kingdom: Fungi … A psychoactive mushroom known for its distinctive red cap…"). Close button. <code>useMediaQuery</code> from <code>react-responsive</code> to position it bottom-sheet-style on mobile vs floating card on desktop.</li>
+    <li>Dim the rest of the scene while the card is open (a <code>uDim</code> uniform on the ground/trees, or a translucent DOM scrim) — focus is a lighting decision.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Add <code>onPointerOver</code>/<code>out</code> cursor handling globally (a tiny hook that sets <code>document.body.style.cursor</code>). You'll reuse it for every clickable thing.</li>
+    <li>Animate the spots: make them shimmer slightly with noise + uTime. Taste check: if you notice it immediately, it's too strong.</li>
+    <li>Keyboard accessibility: Enter/Space opens the panel when the mushroom is "focused". Think about what focus even means for a 3D object.</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why does the fresnel term use the <em>view</em> direction, and in which space must the normal and view vector live for the dot product to be honest?</li>
+    <li>Why lerp uniforms in <code>useFrame</code> instead of animating React state?</li>
+    <li>When would you pick <code>&lt;Html&gt;</code> over a fixed overlay, and what does <code>&lt;Html&gt;</code> cost at render time?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. <code>LatheGeometry</code> builds a mushroom from:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>A heightmap</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>A 2D profile of <code>Vector2</code> points spun around the Y axis</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Two spheres and a cylinder merged</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>A signed distance function</span></label>
+      <p class="explain">x is radius, y is height; one curve gives stem and cap.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>2. The fresnel term <code>pow(1.0 - dot(viewDir, normal), p)</code> is strongest:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Where the surface faces the camera head-on</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Where the surface is edge-on to the camera</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Where the light hits directly</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Uniformly everywhere</span></label>
+      <p class="explain">The dot product goes to 0 at grazing angles, so <code>1 - dot</code> peaks there; that's the rim.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>3. Hover state changes <code>uGlow</code> from 0 to 0.4. The storyboard feel requires the change to be gradual. Best pattern:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>CSS transition on the canvas</span></label>
+      <label><input type="radio" name="q3" value="b"> <span><code>setTimeout</code> chain stepping the value</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Lerp the uniform toward a target each frame in <code>useFrame</code></span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Spring-animate React state and pass it as a prop</span></label>
+      <p class="explain">Frame-rate-independent-ish, organic, no React churn; make it exact with <code>1 - exp(-k * delta)</code> damping.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>4. Why can <code>onClick</code> on a mesh be expensive if the mesh has very many triangles?</legend>
+      <label><input type="radio" name="q4" value="a"> <span>React re-renders on every pointer move</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The raycaster tests the ray against the mesh's triangles</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The GPU must re-upload the geometry</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>It isn't — raycasting cost doesn't depend on the mesh</span></label>
+      <p class="explain">Intersection is per-triangle (bounds help, but dense meshes still cost); a simple invisible collider proxy is a common fix.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>5. drei's <code>&lt;Html&gt;</code> vs a fixed DOM overlay — a real tradeoff of <code>&lt;Html&gt;</code> is:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>It can't use CSS</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>It re-projects the DOM element to track a 3D point, updating every frame</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>It only works with OrbitControls</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>It blocks raycasting on the whole canvas</span></label>
+      <p class="explain">Per-frame style updates for tracking; fine for one card, costly for dozens.</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Lathe mushroom that reads as Fly Agaric from any angle</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>Idle / hover / click are three visibly different light states, smoothly blended</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>Info card with blur, border, entrance animation; responsive placement</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You wrote the fresnel line from memory</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Fungal Network — Learning Plan</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <span>The Fungal Network</span>
+  <span class="spacer"></span>
+  <a href="wood-wide-web/00-setup-and-first-scene.html">Start: Lesson 00 →</a>
+</nav>
+<main>
+  <h1>The Fungal Network — Learning Plan</h1>
+  <p class="meta">An interactive journey from forest to microscopic life (see <code>public/inspiration/</code>).</p>
+  <p>The goal is <strong>not</strong> to finish fast. The goal is that by the end you can build each piece from scratch and explain <em>why</em> it works.</p>
+
+  <h2>"I'm back" protocol</h2>
+  <div class="focus-card" id="current-focus">
+    <p class="meta">When the user says <strong>"I'm back"</strong> (or similar), the assistant must read this card and remind them of the current focus. Updated whenever the user names a specific lesson or action as their next step.</p>
+    <h3>Current focus</h3>
+    <p>When the user says <strong>"I'm back"</strong>, remind them in this order:</p>
+    <ol>
+      <li>Read <code>src/3d-components/MyceliumNetwork.jsx</code>.</li>
+      <li>Read <a href="network/mycelium-connections.html">How the mycelium connections are built</a>, then do the exercises.</li>
+    </ol>
+    <p class="updated">Last updated: 2026-10-15</p>
+  </div>
+
+  <h2>What you are learning</h2>
+  <table>
+    <tr><th>Track</th><th>What it means here</th><th>Lessons</th></tr>
+    <tr><td>GLSL</td><td>Vertex/fragment shaders via <code>vite-plugin-glsl</code>, uniforms, noise, masks</td><td>01, 02, 04, 05</td></tr>
+    <tr><td>Procedural generation</td><td>Ground, trees, mushrooms, and the mycelium network — noise, masks, instanced scatter</td><td>01, 04, scatter</td></tr>
+    <tr><td>Particles vs instances</td><td>Small spores as GPU particles (<code>Points</code>), big spores as <code>InstancedMesh</code></td><td>03, 06</td></tr>
+    <tr><td>Bezier curves + camera</td><td>Curves as data, camera flights along them, scroll scrubbing</td><td>03, 06</td></tr>
+    <tr><td>Landscape framing</td><td>Position, lens, and orbit limits so the forest reads as a place</td><td>landscape camera</td></tr>
+    <tr><td>Phones and tablets</td><td>Breakpoint tiers, viewport height, camera, scene cost, HDR vs directional light</td><td>mobile scene</td></tr>
+    <tr><td>The network</td><td>The mushroom component, screen-space picking, breathing instances, a graph drawn as glowing points</td><td>scattered mushrooms, clickable mushrooms, mycelium web</td></tr>
+    <tr><td>UI / UX</td><td>Info panels, hover states, CSS effects (backdrop blur, vignette, transitions)</td><td>02, 05, 07, forest intro</td></tr>
+    <tr><td>Orchestration</td><td>An "episode" state machine that drives the whole story</td><td>07</td></tr>
+  </table>
+
+  <h2>The episodes (from the storyboard)</h2>
+  <ol>
+    <li><strong>Enter the forest</strong> — ambient night scene, fog, moon, fireflies</li>
+    <li><strong>Click the mushroom</strong> — raycast, glow, info panel (Fly Agaric card)</li>
+    <li><strong>Follow the spores</strong> — particle release, camera follows a bezier path</li>
+    <li><strong>Discover the ground</strong> — camera tilts down, mycelium network revealed under cursor</li>
+    <li><strong>Connect the trees</strong> — click a node, a signal pulse travels the network</li>
+    <li><strong>Watch the exchange</strong> — nutrients flow tree→fungus and fungus→tree</li>
+    <li><strong>Click a spore</strong> — zoom into the microscopic world (instanced spores)</li>
+    <li><strong>The cycle continues</strong> — spore → mycelium → primordium → mushroom</li>
+    <li><strong>Reflection</strong> — pull back, the forest breathes as one</li>
+  </ol>
+
+  <h2>How to work through a lesson</h2>
+  <ol>
+    <li>Read the lesson's <strong>Concepts</strong> section before touching code.</li>
+    <li>Build it yourself from the <strong>Build steps</strong>. They are directions, not code dumps. When stuck for more than ~30 min on one step, ask for a hint on <em>that step only</em>.</li>
+    <li>Do the <strong>Exercises</strong> — they are where the learning actually happens.</li>
+    <li>Answer the <strong>Checkpoint</strong> questions out loud or in writing. If you can't, reread before moving on.</li>
+    <li>Take the <strong>Quiz</strong> — pick answers, hit "Check answers". Miss two or more → redo the related exercise.</li>
+    <li>Tick the lesson's "Done when" boxes and the lesson box below. They are saved in your browser.</li>
+  </ol>
+
+  <h2>Progress</h2>
+  <ul class="lesson-list">
+    <li><label><input type="checkbox" data-persist="lesson-00"> <a href="wood-wide-web/00-setup-and-first-scene.html">Lesson 00 — Setup &amp; first scene</a> <span class="ep">foundation</span></label></li>
+    <li><label><input type="checkbox" data-persist="lesson-01"> <a href="wood-wide-web/01-the-forest-at-night.html">Lesson 01 — The forest at night</a> <span class="ep">Episode 1</span></label></li>
+    <li><label><input type="checkbox" data-persist="lesson-02"> <a href="wood-wide-web/02-meet-the-mushroom.html">Lesson 02 — Meet the mushroom</a> <span class="ep">Episode 2</span></label></li>
+    <li><label><input type="checkbox" data-persist="lesson-03"> <a href="wood-wide-web/03-follow-the-spores.html">Lesson 03 — Follow the spores</a> <span class="ep">Episode 3</span></label></li>
+    <li><label><input type="checkbox" data-persist="lesson-04"> <a href="wood-wide-web/04-the-hidden-network.html">Lesson 04 — The hidden network</a> <span class="ep">Episode 4</span></label></li>
+    <li><label><input type="checkbox" data-persist="lesson-05"> <a href="wood-wide-web/05-signals-through-the-web.html">Lesson 05 — Signals through the web</a> <span class="ep">Episodes 5–6</span></label></li>
+    <li><label><input type="checkbox" data-persist="lesson-06"> <a href="wood-wide-web/06-zoom-into-a-spore.html">Lesson 06 — Zoom into a spore</a> <span class="ep">Episode 7</span></label></li>
+    <li><label><input type="checkbox" data-persist="lesson-07"> <a href="wood-wide-web/07-the-cycle-and-polish.html">Lesson 07 — The cycle &amp; the whole story</a> <span class="ep">Episodes 8–9</span></label></li>
+  </ul>
+  <p class="meta">Mark a lesson done only when every item in its <strong>Done when</strong> list is true.</p>
+
+  <h2>Procedural techniques</h2>
+  <ul class="lesson-list">
+    <li><label><input type="checkbox" data-persist="procedural-terrain-geometry"> <a href="procedural/terrain-geometry.html">Terrain geometry, noise, and FBM</a> <span class="ep">hills</span></label></li>
+    <li><label><input type="checkbox" data-persist="procedural-mask-scatter"> <a href="procedural/mask-based-scattering.html">Mask-based scattering on terrain</a> <span class="ep">firs + mushrooms</span></label></li>
+    <li><label><input type="checkbox" data-persist="procedural-instancing"> <a href="procedural/instancing-scattered-models.html">Instancing scattered firs and mushrooms</a> <span class="ep">GLB parts</span></label></li>
+    <li><label><input type="checkbox" data-persist="procedural-terrain-pbr"> <a href="procedural/terrain-pbr-material.html">Terrain PBR textures, color space, and tiling</a> <span class="ep">soil maps</span></label></li>
+    <li><label><input type="checkbox" data-persist="procedural-landscape-camera"> <a href="procedural/landscape-camera.html">Framing the camera so the forest feels like a landscape</a> <span class="ep">orbit limits</span></label></li>
+    <li><label><input type="checkbox" data-persist="procedural-mobile-scene"> <a href="procedural/mobile-scene.html">What to change for phones and tablets</a> <span class="ep">breakpoints</span></label></li>
+  </ul>
+
+  <h2>The network</h2>
+  <ul class="lesson-list">
+    <li><label><input type="checkbox" data-persist="network-scattered-mushrooms"> <a href="network/scattered-mushrooms.html">How ScatteredMushrooms works</a> <span class="ep">the whole file</span></label></li>
+    <li><label><input type="checkbox" data-persist="network-clickable-mushrooms"> <a href="network/clickable-mushrooms.html">Mushrooms you can click</a> <span class="ep">pick + breath</span></label></li>
+    <li><label><input type="checkbox" data-persist="network-pick-nearest"> <a href="network/pick-nearest-mushroom.html">Picking the nearest mushroom</a> <span class="ep">pixels</span></label></li>
+    <li><label><input type="checkbox" data-persist="network-mycelium-connections"> <a href="network/mycelium-connections.html">How the mycelium connections are built</a> <span class="ep">the library</span></label></li>
+    <li><label><input type="checkbox" data-persist="network-growing-mycelium"> <a href="network/growing-mycelium.html">A mycelium web of glowing points</a> <span class="ep">graph + points</span></label></li>
+  </ul>
+
+  <h2>UI &amp; TypeScript lessons</h2>
+  <ul class="lesson-list">
+    <li><label><input type="checkbox" data-persist="ui-forest-intro"> <a href="ui/forest-intro-overlay.html">The forest title and the cursor hint</a> <span class="ep">panel 1</span></label></li>
+    <li><label><input type="checkbox" data-persist="ui-custom-materials-typescript"> <a href="ui/custom-materials-typescript.html">TypeScript specifics for custom R3F materials</a> <span class="ep">UI track</span></label></li>
+  </ul>
+
+  <h2>Ground rules for this project</h2>
+  <ul>
+    <li><strong>No imported 3D models.</strong> Everything is generated: lathe profiles, tubes along curves, instanced primitives, noise-displaced planes.</li>
+    <li><strong>GLSL first, TSL later.</strong> Shaders live in <code>src/shaders/*.glsl</code> and are imported as strings (<code>vite-plugin-glsl</code> is configured in <code>vite.config.ts</code>, and <code>src/glsl.d.ts</code> teaches TypeScript about those imports).</li>
+    <li><strong>One scene, many states.</strong> The whole experience is a single R3F <code>&lt;Canvas&gt;</code>; episodes change camera, uniforms, and visibility — they don't remount the world.</li>
+  </ul>
+
+  <h2>Reference shelf</h2>
+  <ul>
+    <li><a href="https://thebookofshaders.com/">The Book of Shaders</a> — GLSL fundamentals, read ch. 1–12 alongside lessons 01–04</li>
+    <li><a href="https://r3f.docs.pmnd.rs/">R3F docs</a> and <a href="https://drei.docs.pmnd.rs/">drei docs</a></li>
+    <li><a href="https://threejs.org/manual/">three.js fundamentals</a> — especially "Custom BufferGeometry" and "Instancing"</li>
+    <li><a href="https://iquilezles.org/articles/">Inigo Quilez articles</a> — noise, fbm, distance functions</li>
+  </ul>
+</main>
+<footer>Progress and quiz state live in this browser's localStorage.</footer>
+<script src="lessons.js"></script>
+</body>
+</html>

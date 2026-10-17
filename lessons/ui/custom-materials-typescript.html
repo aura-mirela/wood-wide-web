@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TypeScript specifics for custom R3F materials</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="../wood-wide-web/00-setup-and-first-scene.html">Wood Wide Web: Lesson 00 →</a>
+</nav>
+<main>
+  <p class="meta">UI track · TypeScript, imports/exports, R3F catalogue extension</p>
+  <h1>TypeScript specifics for custom R3F materials</h1>
+
+  <p class="episode"><strong>The problem this lesson solves:</strong> the browser can know that a custom material exists while TypeScript still reports that <code>testShaderMaterial</code> is missing from <code>JSX.IntrinsicElements</code>. Runtime registration and type registration are separate jobs.</p>
+
+  <h2>Goal</h2>
+  <p>Create a custom shader material that:</p>
+  <ul>
+    <li>loads vertex and fragment GLSL files;</li>
+    <li>is registered with React Three Fiber at runtime;</li>
+    <li>is recognized by TypeScript as <code>&lt;testShaderMaterial /&gt;</code>;</li>
+    <li>is imported for its side effect without an unused import;</li>
+    <li>is attached to a mesh as a material rather than rendered as a React component.</li>
+  </ul>
+
+  <h2>1. Pick the correct file extension</h2>
+  <table>
+    <tr><th>Extension</th><th>Use it when</th></tr>
+    <tr><td><code>.ts</code></td><td>The file contains TypeScript but no JSX. A custom-material definition normally belongs here.</td></tr>
+    <tr><td><code>.tsx</code></td><td>The file contains TypeScript and JSX such as <code>&lt;mesh&gt;</code>.</td></tr>
+    <tr><td><code>.js</code> / <code>.jsx</code></td><td>JavaScript files. TypeScript cannot infer your custom R3F element as precisely without extra declarations.</td></tr>
+  </table>
+  <p>Your material definition contains no JSX, so prefer:</p>
+  <pre><code>src/materials/TestShaderMaterial.ts</code></pre>
+  <p>Using <code>.tsx</code> still compiles, but it suggests JSX is present when it is not. File extensions communicate intent to both tools and readers.</p>
+
+  <h2>2. Understand what <code>shaderMaterial()</code> returns</h2>
+  <pre><code>const TestShaderMaterial = shaderMaterial(
+  {
+    uTime: 0,
+    uColor: new Color('#00ffcc'),
+  },
+  vertexShader,
+  fragmentShader,
+)</code></pre>
+  <p><code>shaderMaterial()</code> returns a <strong>constructor</strong>: a class derived from <code>THREE.ShaderMaterial</code>. It is not a React component and it is not yet an instantiated material.</p>
+  <p>This distinction explains why this is wrong:</p>
+  <pre><code>&lt;TestShaderMaterial /&gt; // React interprets uppercase names as components</code></pre>
+  <p>It also explains why this is incomplete:</p>
+  <pre><code>&lt;primitive object={TestShaderMaterial} /&gt; // object receives the constructor, not an instance</code></pre>
+
+  <h2>3. Runtime registration with <code>extend</code></h2>
+  <pre><code>extend({ TestShaderMaterial })</code></pre>
+  <p><code>extend</code> adds the constructor to R3F's runtime catalogue. R3F transforms the PascalCase constructor name into a lower-camel-case JSX tag:</p>
+  <pre><code>TestShaderMaterial  →  &lt;testShaderMaterial /&gt;</code></pre>
+  <p>The lowercase first letter matters:</p>
+  <ul>
+    <li><code>&lt;TestShaderMaterial /&gt;</code> asks React to call a component.</li>
+    <li><code>&lt;testShaderMaterial /&gt;</code> asks R3F to construct an item from its catalogue.</li>
+  </ul>
+
+  <h2>4. Type registration with module augmentation</h2>
+  <p><code>extend</code> runs in the browser, but TypeScript checks your source before the browser runs it. You must describe the new catalogue entry:</p>
+  <pre><code>import { extend, type ThreeElement } from '@react-three/fiber'
+
+declare module '@react-three/fiber' {
+  interface ThreeElements {
+    testShaderMaterial: ThreeElement&lt;typeof TestShaderMaterial&gt;
+  }
+}</code></pre>
+  <p>This is called <strong>module augmentation</strong>: you are adding one property to R3F's existing <code>ThreeElements</code> interface.</p>
+  <ul>
+    <li><code>testShaderMaterial</code> must exactly match the lowercase JSX tag.</li>
+    <li><code>typeof TestShaderMaterial</code> means “the type of this constructor,” not an instance type.</li>
+    <li><code>ThreeElement&lt;...&gt;</code> converts the Three.js constructor into valid R3F JSX props.</li>
+    <li><code>import type</code> marks <code>ThreeElement</code> as compile-time-only; it adds no browser JavaScript.</li>
+  </ul>
+
+  <h2>5. The complete material module</h2>
+  <pre><code>import { shaderMaterial } from '@react-three/drei'
+import { extend, type ThreeElement } from '@react-three/fiber'
+import { Color } from 'three'
+
+import vertexShader from '../shaders/vertex.glsl'
+import fragmentShader from '../shaders/fragment.glsl'
+
+const TestShaderMaterial = shaderMaterial(
+  {
+    uTime: 0,
+    uColor: new Color('#00ffcc'),
+  },
+  vertexShader,
+  fragmentShader,
+)
+
+extend({ TestShaderMaterial })
+
+declare module '@react-three/fiber' {
+  interface ThreeElements {
+    testShaderMaterial: ThreeElement&lt;typeof TestShaderMaterial&gt;
+  }
+}
+
+export default TestShaderMaterial</code></pre>
+
+  <h2>6. Imports and exports: three different intentions</h2>
+
+  <h3>Default import</h3>
+  <pre><code>import TestShaderMaterial from './materials/TestShaderMaterial'</code></pre>
+  <p>Use this when the current file directly needs the exported constructor—for example, to instantiate it with <code>new TestShaderMaterial()</code>. A module can have only one default export, and the importing file may choose any local name.</p>
+
+  <h3>Named import</h3>
+  <pre><code>export { TestShaderMaterial }
+import { TestShaderMaterial } from './materials/TestShaderMaterial'</code></pre>
+  <p>Use named exports when a module exports several related values. The imported name must match unless you alias it with <code>as</code>.</p>
+
+  <h3>Side-effect import</h3>
+  <pre><code>import './materials/TestShaderMaterial'</code></pre>
+  <p>This means: “run this module, but do not bind one of its exports to a local variable.” It is appropriate here because importing executes <code>extend({ TestShaderMaterial })</code>. After that registration, JSX can use the lowercase catalogue element:</p>
+  <pre><code>&lt;Sphere args={[1, 32, 32]}&gt;
+  &lt;testShaderMaterial /&gt;
+&lt;/Sphere&gt;</code></pre>
+  <p>Prefer extensionless application imports. Write <code>./materials/TestShaderMaterial</code>, not <code>./materials/TestShaderMaterial.tsx</code>; Vite and TypeScript resolve the source extension.</p>
+
+  <h2>7. Attachment and scene-tree placement</h2>
+  <p>A material belongs inside the mesh whose <code>material</code> property it should replace:</p>
+  <pre><code>&lt;Sphere args={[1, 32, 32]}&gt;
+  &lt;testShaderMaterial /&gt;
+&lt;/Sphere&gt;</code></pre>
+  <p>R3F recognizes material objects and automatically attaches this one to the parent's <code>material</code> property. You can be explicit:</p>
+  <pre><code>&lt;testShaderMaterial attach="material" /&gt;</code></pre>
+  <p>A self-closing parent cannot have children:</p>
+  <pre><code>&lt;Sphere /&gt;                 // already closed
+&lt;testShaderMaterial /&gt;     // sibling, not the sphere's material
+&lt;/Sphere&gt;                  // unmatched closing tag</code></pre>
+
+  <h2>8. Uniform props and refs</h2>
+  <p>The defaults passed to <code>shaderMaterial()</code> become uniform-backed properties, so you can provide initial values as JSX props:</p>
+  <pre><code>&lt;testShaderMaterial
+  uTime={0}
+  uColor={new Color('#ff8844')}
+/&gt;</code></pre>
+  <p>For per-frame animation, hold a ref and update the material property rather than React state:</p>
+  <pre><code>const material = useRef&lt;InstanceType&lt;typeof TestShaderMaterial&gt;&gt;(null)
+
+useFrame(({ clock }) =&gt; {
+  if (material.current) {
+    material.current.uTime = clock.elapsedTime
+  }
+})
+
+return &lt;testShaderMaterial ref={material} /&gt;</code></pre>
+  <p>This case directly uses the constructor in the component's type, so use a normal import rather than only a side-effect import.</p>
+
+  <h2>Common errors and what they mean</h2>
+  <table>
+    <tr><th>Error</th><th>Likely cause</th></tr>
+    <tr><td><code>testShaderMaterial does not exist on JSX.IntrinsicElements</code></td><td>Missing or misspelled <code>ThreeElements</code> module augmentation.</td></tr>
+    <tr><td><code>TestShaderMaterial is not defined</code> at runtime</td><td>The material module was not imported, so <code>extend</code> never executed.</td></tr>
+    <tr><td>React component/constructor error from <code>&lt;TestShaderMaterial /&gt;</code></td><td>Uppercase JSX asked React to treat the material constructor as a component.</td></tr>
+    <tr><td>The sphere uses the default material</td><td>The custom material is outside the sphere, or it lacks <code>attach="material"</code> in an ambiguous position.</td></tr>
+    <tr><td><code>Failed to resolve import "./shaders/..."</code></td><td>Relative paths start from the importing file; from <code>materials/</code>, sibling <code>shaders/</code> is <code>../shaders/</code>.</td></tr>
+    <tr><td>Shader compiles but UVs are zero</td><td>The vertex shader assignment is reversed; use <code>vUv = uv</code>.</td></tr>
+  </table>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Without looking above, write the two registrations: runtime and TypeScript.</li>
+    <li>Change the constructor name to <code>ForestGroundMaterial</code>. Predict the JSX tag and augmentation key before trying it.</li>
+    <li>Use a side-effect import first. Then add an animated typed ref and explain why the import must become a value import.</li>
+    <li>Intentionally misspell the augmentation key. Read the compiler error, then fix it.</li>
+    <li>Move the material outside the sphere and explain the scene-tree difference before restoring it.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why does <code>extend</code> not eliminate the need for module augmentation?</li>
+    <li>Why is <code>TestShaderMaterial</code> uppercase while <code>testShaderMaterial</code> starts lowercase?</li>
+    <li>When should you use a side-effect import instead of a default import?</li>
+    <li>What is the difference between a constructor and an instance?</li>
+    <li>Why is <code>.ts</code> more accurate than <code>.tsx</code> for the material-definition file?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. What does <code>shaderMaterial()</code> return?</legend>
+      <label><input type="radio" name="q1" value="a"> <span>A React component</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>A constructor derived from <code>THREE.ShaderMaterial</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span>An already-mounted R3F material instance</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>A GLSL program string</span></label>
+      <p class="explain">It returns a class/constructor. R3F can instantiate it after catalogue registration, or you can instantiate it with <code>new</code>.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. What does <code>extend({ TestShaderMaterial })</code> do?</legend>
+      <label><input type="radio" name="q2" value="a"> <span>It adds the element to TypeScript's JSX types</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>It exports the material as default</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>It registers the constructor in R3F's runtime catalogue</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>It compiles the GLSL files</span></label>
+      <p class="explain">Runtime registration and TypeScript registration are separate. <code>extend</code> handles runtime only.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. Which JSX tag maps to the registered <code>TestShaderMaterial</code> constructor?</legend>
+      <label><input type="radio" name="q3" value="a"> <span><code>&lt;testShaderMaterial /&gt;</code></span></label>
+      <label><input type="radio" name="q3" value="b"> <span><code>&lt;TestShaderMaterial /&gt;</code></span></label>
+      <label><input type="radio" name="q3" value="c"> <span><code>&lt;test-shader-material /&gt;</code></span></label>
+      <label><input type="radio" name="q3" value="d"> <span><code>&lt;shaderMaterial.test /&gt;</code></span></label>
+      <p class="explain">R3F maps PascalCase constructors to lower-camel-case catalogue elements.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. Why use <code>import './materials/TestShaderMaterial'</code>?</legend>
+      <label><input type="radio" name="q4" value="a"> <span>It imports only TypeScript types</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>It creates a material instance</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>It avoids loading the module until click</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>It executes the module's registration without creating an unused local binding</span></label>
+      <p class="explain">The import exists for its side effect: executing <code>extend(...)</code>.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. Which file extension best fits a typed material definition containing no JSX?</legend>
+      <label><input type="radio" name="q5" value="a"> <span><code>.jsx</code></span></label>
+      <label><input type="radio" name="q5" value="b"> <span><code>.ts</code></span></label>
+      <label><input type="radio" name="q5" value="c"> <span><code>.tsx</code> is required for all R3F code</span></label>
+      <label><input type="radio" name="q5" value="d"> <span><code>.d.ts</code></span></label>
+      <p class="explain"><code>.ts</code> communicates TypeScript without JSX. R3F does not require <code>.tsx</code> unless the file actually contains JSX.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can explain constructor, instance, React component, and R3F catalogue element as four distinct ideas</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can write both <code>extend</code> and the <code>ThreeElements</code> augmentation without copying</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can choose correctly among default, named, side-effect, and type-only imports</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>Your custom material attaches inside a mesh with no TypeScript error</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

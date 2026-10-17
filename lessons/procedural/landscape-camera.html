@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Framing the camera so the forest feels like a landscape</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="terrain-pbr-material.html">← Terrain PBR</a>
+  <span class="spacer"></span>
+  <a href="../index.html">All lessons</a>
+  <span class="spacer"></span>
+  <a href="mobile-scene.html">Phones and tablets →</a>
+</nav>
+<main>
+  <p class="meta">Procedural track · camera position, look-at, fov, OrbitControls limits</p>
+  <h1>Framing the camera so the forest feels like a landscape</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> how to choose where the camera stands, what it looks at, and how wide the lens is, then how to lock <code>OrbitControls</code> so a visitor can only turn and zoom inside that landscape. The ground in this project is a 20-unit square. Past its edge there is nothing. A landscape shot hides that edge, keeps the horizon quiet, and never puts the lens inside a tree.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>read a shot off the camera-debug panel: position, look-at point, field of view, and the rotation line;</li>
+    <li>say what a rotation of <code>[0, 0, 0]</code> means, and when it is the correct result;</li>
+    <li>turn a chosen position and look-at point into an azimuth angle, a polar angle, and a distance;</li>
+    <li>set a short turn on the side that shows the edge of the ground, and a longer turn on the side that still looks like forest;</li>
+    <li>freeze up-and-down, and limit zoom so the camera cannot enter the foliage.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/debug/CameraDebug.jsx</code></td><td>Temporary Leva panel and axis helper. Use it to hunt for the shot, then remove it.</td></tr>
+    <tr><td><code>src/Experience.jsx</code></td><td>The shot you keep: <code>camera</code> on <code>&lt;Canvas&gt;</code>, and the <code>&lt;OrbitControls&gt;</code> limits.</td></tr>
+    <tr><td><code>src/lib/createTerrainGeometry.js</code></td><td><code>TERRAIN_SIZE = 20</code>. The ground runs from <code>-10</code> to <code>10</code> on X and Z.</td></tr>
+  </table>
+
+  <h2>1. What “landscape” means in this scene</h2>
+  <p>A landscape frame has three jobs:</p>
+  <ul>
+    <li><strong>You are standing in it.</strong> Camera height near <code>y = 2</code> is eye level over hills whose amplitude is well under 1. A high <code>y</code> becomes a map. A <code>y</code> inside the ground becomes a burrow.</li>
+    <li><strong>The square stays hidden.</strong> The ground is only 20 units across. If the turn or the zoom reveals the straight edge, the forest stops being a place and becomes a tile.</li>
+    <li><strong>The lens stays outside the trees.</strong> Fir foliage is many flat cards crossing through each other. Inside that pile, the depth buffer swaps which card is in front from frame to frame. The branches blink. That blink is the camera being among the cards, not a broken rotation.</li>
+  </ul>
+  <p>The shot this scene settled on is a camera at <code>[0, 2, 12]</code>, looking at <code>[-2, 1, -3.5]</code>, with <code>fov: 50</code>. The rest of the lesson is how those numbers were measured, and how the orbit limits were wrapped around them. If you move the camera, measure again. Do not treat <code>0.13</code> and <code>1.51</code> as constants that belong to every scene.</p>
+
+  <h2>2. Hunt with the debug panel, then throw it away</h2>
+  <p><code>CameraDebug</code> does two visible things. An <code>&lt;axesHelper args={[10]} /&gt;</code> sits at the origin: red is X, green is Y, blue is Z, each line 10 units long. A Leva panel named <strong>Camera debug</strong> drives the camera every frame:</p>
+  <ul>
+    <li><code>x</code>, <code>y</code>, <code>z</code> — where the camera <em>is</em>. Each runs from <code>-30</code> to <code>30</code>.</li>
+    <li><code>lookX</code>, <code>lookY</code>, <code>lookZ</code> — the world point the camera looks at. Same range. This is a point, not an angle.</li>
+    <li><code>fov</code> — vertical field of view in degrees, from <code>20</code> to <code>75</code>. The panel writes <code>camera.fov</code> and then calls <code>updateProjectionMatrix()</code>. Without that call the number changes and the picture does not.</li>
+  </ul>
+  <p>The white line at the bottom left is <code>camera.rotation</code> after <code>lookAt</code>, in <strong>radians</strong>, to three decimal places. It is a readout. There is no rotation slider, so the line cannot fight the look-at point. Copy it when the frame is right, along with the six position and look-at numbers and <code>fov</code>.</p>
+  <p>While <code>&lt;CameraDebug /&gt;</code> is mounted, its <code>useFrame</code> overwrites the camera every frame. The <code>position</code> and <code>fov</code> on <code>&lt;Canvas&gt;</code> are not what you see. When the frame is chosen, delete <code>src/debug/CameraDebug.jsx</code>, remove <code>&lt;CameraDebug /&gt;</code>, and put the numbers on <code>&lt;Canvas&gt;</code> and <code>&lt;OrbitControls&gt;</code>.</p>
+
+  <h2>3. A rotation of zero can be the right answer</h2>
+  <p>A three.js camera looks down its own <strong>−Z</strong> axis when <code>rotation</code> is <code>[0, 0, 0]</code>. If the camera and the look-at point share X and Y, and the look-at point is in front (its Z is smaller than the camera’s Z), <code>lookAt</code> leaves the rotation at zero.</p>
+  <p>Example: position <code>[0, 2, 13]</code>, look-at <code>[0, 2, -3.5]</code>. The direction is straight along −Z. The readout <code>[0.000, 0.000, 0.000]</code> is that aim, not a stuck label. <code>lookZ</code> only picks a point on that line. Any look-at point with the same X, the same Y, and a Z in front of the camera produces the same rotation.</p>
+  <p>The kept shot is <em>not</em> that case. The camera is at <code>[0, 2, 12]</code> and the target is <code>[-2, 1, -3.5]</code>, so the aim is a little to the side and a little downward. The Euler line will not be all zeros. You still do not type that Euler line into <code>OrbitControls</code>. The controls want a target, then angles around that target.</p>
+
+  <h2>4. Position and lens go on the canvas. The aim goes on the controls.</h2>
+  <pre><code>&lt;Canvas camera={{ position: [0, 2, 12], fov: 50 }}&gt;
+  &lt;OrbitControls target={[-2, 1, -3.5]} /&gt;
+&lt;/Canvas&gt;</code></pre>
+  <ul>
+    <li><code>position</code> is the eye.</li>
+    <li><code>fov</code> is the vertical lens angle in degrees. <code>50</code> is a moderate lens: tighter than React Three Fiber’s default <code>75</code>, close to three.js’s default <code>50</code>. Wider lenses show more of the square’s edge. Narrower lenses feel like a telescope.</li>
+    <li><code>target</code> is the look-at point. <code>OrbitControls</code> orbits around it. If you omit <code>target</code>, the default is the origin, and the first frame tilts the camera down toward <code>(0, 0, 0)</code>.</li>
+  </ul>
+  <p>Scroll-wheel zoom does <strong>not</strong> change <code>fov</code>. It moves the camera closer to or farther from <code>target</code>. The lens stays <code>50</code>. The travel is limited with distance, in the next sections.</p>
+
+  <h2>5. Measure azimuth, polar angle, and distance from the two points</h2>
+  <p>Take the vector from the target back to the camera:</p>
+  <pre><code>offset = camera.position − target
+       = (0 − (−2),  2 − 1,  12 − (−3.5))
+       = (2, 1, 15.5)
+
+distance = length(offset) ≈ 15.7
+azimuth  = atan2(offset.x, offset.z) = atan2(2, 15.5) ≈ 0.13
+polar    = acos(offset.y / distance) = acos(1 / 15.7) ≈ 1.51</code></pre>
+  <p>All three results are in radians, except distance, which is in scene units.</p>
+  <ul>
+    <li><strong>Azimuth</strong> is the left–right angle around the green Y axis. <code>0</code> means the camera sits on the target’s +Z side. This shot is about <code>0.13</code> radians (roughly 7°) off that.</li>
+    <li><strong>Polar</strong> is the nod, measured down from straight above the target. <code>0</code> is overhead. <code>π/2</code> (about <code>1.57</code>) is level with the target. <code>1.51</code> is a few degrees above level, so the lens looks slightly down and the ground sits in the lower frame. That slight downward look is a lot of what makes the view feel like a place you are standing in.</li>
+    <li><strong>Distance</strong> is how far the eye is from the target along that same line. About <code>15.7</code> here.</li>
+  </ul>
+  <p>Recompute these three whenever you change position or target. The limits in the next section are offsets around <em>this</em> measurement.</p>
+
+  <h2>6. A short turn toward the edge, a long turn into the woods</h2>
+  <p>Left and right do not have to share one number. Looking <strong>left</strong> decreases the azimuth and stops at <code>minAzimuthAngle</code>. Looking <strong>right</strong> increases it and stops at <code>maxAzimuthAngle</code>.</p>
+  <pre><code>minAzimuthAngle={0.13 - 0.2}
+maxAzimuthAngle={0.13 + 0.7}</code></pre>
+  <p><code>0.13</code> is the measured azimuth, so the window is centered on the shot you liked. <code>0.2</code> radians is about 11° of turn to the left. <code>0.7</code> radians is about 40° to the right. The left stop is the short one because that direction reveals the end of the 20-unit plane. The right stop is the long one because that direction still reads as forest.</p>
+  <p>Shrink the small number if the edge still enters the frame. Grow the large number if the wooded side can show more before it should stop. Swap them if you discover the edge is on the other side.</p>
+  <p>Up and down stay fixed by giving both polar limits the measured polar angle:</p>
+  <pre><code>minPolarAngle={1.51}
+maxPolarAngle={1.51}</code></pre>
+  <p>Equal values freeze the nod. The visitor can turn their head, not tip it. <code>OrbitControls</code> never rolls around Z, so there is no third limit to set. <code>rotation.z</code> stays <code>0</code>.</p>
+
+  <h2>7. Zoom is a distance from the target</h2>
+  <pre><code>minDistance={12}
+maxDistance={16}</code></pre>
+  <p>These are scene units from <code>target</code>, along the orbit line. The framed distance is about <code>15.7</code>, so <code>12</code>…<code>16</code> is a small dolly around that shot. <code>12</code> is as close as the scroll wheel may come. <code>16</code> is as far as it may go.</p>
+  <p><code>minDistance</code> is what keeps the lens out of the firs. It is the distance to the <strong>target</strong>, not the distance to the nearest leaf. A crown that sits between the eye and the target can still surround the camera if the minimum is too small. At <code>6</code>, the path runs through foliage and the leaf cards blink. Raise the minimum until the branches stay in front of the lens. Lowering <code>camera.near</code> does not fix that blink. The near plane only clips fragments closer than <code>0.1</code>. The flicker is two foliage cards fighting for the same depth.</p>
+  <p><code>maxDistance</code> is the other landscape guard. Pull back too far and the square’s boundary becomes the subject. <code>16</code> stops just past the framed shot.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>Comment out <code>&lt;OrbitControls /&gt;</code> and mount <code>&lt;CameraDebug /&gt;</code>. Confirm the axes: red X, green Y, blue Z.</li>
+    <li>Move <code>x y z</code>, the look-at point, and <code>fov</code> until the ground fills the lower frame and the far side still looks like forest. Write down all seven numbers and the rotation line.</li>
+    <li>Remove the debug component. Put position and <code>fov</code> on <code>&lt;Canvas camera&gt;</code>. Put the look-at point on <code>&lt;OrbitControls target&gt;</code>.</li>
+    <li>From those two points, compute distance, <code>atan2(offset.x, offset.z)</code>, and <code>acos(offset.y / distance)</code>.</li>
+    <li>Center the azimuth window on that azimuth. Use a smaller allowance on the side that shows the plane edge.</li>
+    <li>Set <code>minPolarAngle</code> and <code>maxPolarAngle</code> to the same polar angle.</li>
+    <li>Set <code>minDistance</code> and <code>maxDistance</code> around the measured distance, wide enough to breathe and tight enough that you cannot enter a crown or reveal the square.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>With the debug panel on, aim the camera straight down −Z (same X, same Y, look-at Z in front). Predict the rotation line before you look. It should read about <code>[0.000, 0.000, 0.000]</code>.</li>
+    <li>Restore the landscape shot. On paper, compute offset, distance, azimuth, and polar angle from <code>[0, 2, 12]</code> and <code>[-2, 1, -3.5]</code>. Compare them to the limits in <code>Experience.jsx</code>.</li>
+    <li>Change only the left allowance from <code>0.2</code> to <code>0.8</code>, orbit left, and watch for the edge of the plane. Put <code>0.2</code> back.</li>
+    <li>Set <code>minPolarAngle</code> to <code>1.51 - 0.15</code> and <code>maxPolarAngle</code> to <code>1.51 + 0.15</code>. The nod should return. Set both back to <code>1.51</code> and confirm up and down are fixed.</li>
+    <li>Set <code>minDistance</code> to <code>6</code> and dolly into a fir until the branches blink. Write one sentence: which surfaces are fighting, and why raising <code>minDistance</code> stops it. Restore <code>12</code>.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Which Leva rows are the camera’s position, which are the look-at point, and which control is the lens?</li>
+    <li>Why can the rotation line be all zeros while <code>lookZ</code> is not zero?</li>
+    <li>What does <code>OrbitControls</code> orbit around if you forget <code>target</code>?</li>
+    <li>Which prop stops a left turn, and which number in <code>0.13 - 0.2</code> is the starting angle rather than the allowance?</li>
+    <li>Why are <code>minPolarAngle</code> and <code>maxPolarAngle</code> equal, and why is there no Z-rotation limit?</li>
+    <li>Is <code>minDistance</code> a distance to the nearest tree, or a distance to the orbit target?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. The rotation line at the bottom left is:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>A second set of sliders for <code>rotation.x</code>, <code>y</code>, and <code>z</code></span></label>
+      <label><input type="radio" name="q1" value="b"> <span>The look-at point, in degrees</span></label>
+      <label><input type="radio" name="q1" value="c"> <span><code>camera.rotation</code> after <code>lookAt</code>, in radians</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>The azimuth limit</span></label>
+      <p class="explain">The panel writes position and calls <code>lookAt</code>. The line only reports the Euler angles that aim produced.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>2. Position <code>[0, 2, 13]</code> and look-at <code>[0, 2, -3.5]</code> produce rotation <code>[0, 0, 0]</code> because:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>The camera is already looking down −Z, which is its default forward</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>The readout is broken and ignores <code>lookAt</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span><code>lookZ</code> is stored in degrees and rounds to zero</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Field of view cancels rotation</span></label>
+      <p class="explain">Same X, same Y, target in front: the direction is −Z. <code>lookAt</code> leaves the identity rotation.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>3. For this shot, <code>0.13</code> and <code>1.51</code> are:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Degrees of field of view and camera height</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>The azimuth and polar angle of the offset from the target to the camera</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>The Euler rotation copied from the debug line</span></label>
+      <label><input type="radio" name="q3" value="d"> <span><code>minDistance</code> and <code>maxDistance</code></span></label>
+      <p class="explain"><code>atan2(2, 15.5) ≈ 0.13</code> and <code>acos(1 / 15.7) ≈ 1.51</code>. Move the camera and these numbers change.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. <code>minAzimuthAngle={0.13 - 0.2}</code> and <code>maxAzimuthAngle={0.13 + 0.7}</code> mean:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>The same turn is allowed on both sides</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Up and down are limited, left and right are free</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The camera rolls 0.2 radians around Z</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>About 11° of turn one way and about 40° the other, centered on the chosen view</span></label>
+      <p class="explain">Looking left decreases azimuth toward the minimum. The short side is the one that shows the edge of the plane.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>5. Setting both polar angles to <code>1.51</code>:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Disables left and right rotation</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Changes the field of view to 1.51 degrees</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Freezes the up-and-down nod at the measured angle</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Rolls the camera around Z</span></label>
+      <p class="explain">Polar angle is the nod. Equal min and max lock it. Orbit controls do not roll, so Z has no matching prop.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>6. The branches blink when the camera is very near because:</legend>
+      <label><input type="radio" name="q6" value="a"> <span><code>fov</code> is animating</span></label>
+      <label><input type="radio" name="q6" value="b"> <span>The lens is among overlapping leaf cards, and the depth buffer swaps which card wins</span></label>
+      <label><input type="radio" name="q6" value="c"> <span>Azimuth limits are equal</span></label>
+      <label><input type="radio" name="q6" value="d"> <span>The axis helper is 10 units long</span></label>
+      <p class="explain"><code>minDistance</code> pulls the eye back from the target so the path no longer runs through the crown. It is not a distance to each tree.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can name which debug controls are position, look-at, and field of view</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can explain a rotation readout of all zeros</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can compute azimuth, polar angle, and distance from a position and a target</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can set a shorter turn on the side that shows the edge of the ground</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can freeze the nod and limit zoom without moving the lens into the foliage</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 5/6 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

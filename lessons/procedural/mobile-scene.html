@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What to change for phones and tablets</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="landscape-camera.html">← Landscape camera</a>
+  <span class="spacer"></span>
+  <a href="../index.html">All lessons</a>
+  <span class="spacer"></span>
+  <a href="../ui/forest-intro-overlay.html">Forest title →</a>
+</nav>
+<main>
+  <p class="meta">Procedural track · breakpoints, viewport, camera, scene cost, lights</p>
+  <h1>What to change for phones and tablets</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> the scene in <code>Experience.jsx</code> is one desktop shot at every width. <code>src/breakpoints/</code> already names the widths, and nothing reads them. This lesson is the list of changes to make, including the HDR sky and the directional light — and which of those two you leave alone.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>say which breakpoint a landscape phone falls into, and why <code>isXs || isSm</code> misses it;</li>
+    <li>pick camera, terrain, instance counts, and pixel ratio from those tiers;</li>
+    <li>size the page with <code>100dvh</code> on desktop and on a phone;</li>
+    <li>keep the directional light, keep the HDR as the sky and the image-based light, and name the one light change that is actually about cost.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/breakpoints/breakpoints.js</code></td><td>The widths. Bootstrap’s scale. Nothing else imports this yet except the hook.</td></tr>
+    <tr><td><code>src/breakpoints/useBreakpoints.js</code></td><td>One boolean per band. Call it in <code>Experience</code>, which is a normal React component, and pass numbers down into the canvas.</td></tr>
+    <tr><td><code>src/Experience.jsx</code></td><td>Canvas size, camera, orbit distances, pixel ratio, the directional light.</td></tr>
+    <tr><td><code>src/SceneEnvironment.jsx</code></td><td>The 1K HDR used as background and as <code>scene.environment</code>.</td></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Already accepts <code>treeCount</code> and <code>mushroomCount</code>. It does not yet accept a segment count.</td></tr>
+    <tr><td><code>src/lib/createTerrainGeometry.js</code></td><td><code>TERRAIN_SEGMENTS = 256</code>. <code>createTerrainGeometry({ segments })</code> already exists.</td></tr>
+    <tr><td><code>src/App.css</code></td><td><code>html</code> and <code>body</code> are <code>height: 100%</code>. The canvas in <code>Experience</code> is <code>100vh</code>.</td></tr>
+  </table>
+
+  <h2>1. Read the bands before you invent a “mobile” flag</h2>
+  <table>
+    <tr><th>Flag</th><th>Width</th><th>Typical device</th></tr>
+    <tr><td><code>isXs</code></td><td>≤ 575</td><td>Phone, portrait</td></tr>
+    <tr><td><code>isSm</code></td><td>576–767</td><td>Large phone, portrait</td></tr>
+    <tr><td><code>isMd</code></td><td>768–991</td><td>Tablet, and a phone turned sideways</td></tr>
+    <tr><td><code>isLg</code></td><td>992–1199</td><td>Small laptop</td></tr>
+    <tr><td><code>isXl</code></td><td>1200–1399</td><td>Desktop</td></tr>
+    <tr><td><code>isXxl</code></td><td>≥ 1400</td><td>Wide desktop</td></tr>
+  </table>
+  <p>Only one flag is true at a time. The boundaries meet: 575 is <code>xs</code>, 576 is <code>sm</code>, 767 is <code>sm</code>, 768 is <code>md</code>.</p>
+  <p>A phone in landscape is often about 800–900px wide. That is <code>isMd</code>, not <code>isSm</code>. If “mobile” means <code>isXs || isSm</code>, a sideways phone keeps the desktop terrain.</p>
+  <p>Use three tiers:</p>
+  <ul>
+    <li><strong>Phone</strong> — <code>isXs || isSm</code> (≤ 767).</li>
+    <li><strong>Compact</strong> — phone or <code>isMd</code> (≤ 991). Landscape phones and tablets live here.</li>
+    <li><strong>Desktop</strong> — <code>isLg || isXl || isXxl</code> (≥ 992). This tier keeps today’s scene.</li>
+  </ul>
+  <p>Width does not tell you the frame is tall. Three.js <code>fov</code> is the <em>vertical</em> angle. On a portrait phone the lens still covers 50° up and down, and the sides of the forest get cropped. Add a second query, <code>useMediaQuery({ orientation: 'portrait' })</code>, and use it only for the camera.</p>
+
+  <h2>2. Do not build the heavy scene twice</h2>
+  <p><code>useMediaQuery</code> from <code>react-responsive</code> is <code>false</code> on the first render, then flips after mount. On a phone that means <code>Terrain</code> allocates a 256-segment plane, 80 trees, and 160 mushrooms, throws them away, and builds the phone scene. Seed the first value from <code>window.matchMedia</code> so the first render is already the right tier.</p>
+  <p>Call the hook in <code>Experience</code>. Pass <code>segments</code>, <code>treeCount</code>, and <code>mushroomCount</code> into <code>Terrain</code>. Pass <code>dpr</code>, camera position, and <code>fov</code> to <code>&lt;Canvas&gt;</code>. Pass orbit distances to <code>&lt;OrbitControls&gt;</code>.</p>
+
+  <h2>3. The page height, on every screen</h2>
+  <p>Use <code>100dvh</code> on <code>html</code>, <code>body</code>, <code>#root</code>, and the canvas. Do this for desktop too. On a desktop browser <code>100vh</code> and <code>100dvh</code> are the same height. On a phone <code>100vh</code> includes the strip behind the address bar, so the bottom of the scene sits under the browser chrome.</p>
+  <p>Set the whole chain, not only the canvas. <code>html</code> and <code>body</code> are <code>height: 100%</code> today, and that percentage follows the large viewport. A canvas at <code>100dvh</code> inside a parent at <code>100%</code> can be a different height from <code>#root</code>.</p>
+  <p>Put <code>touch-action: none</code> on the canvas so a drag orbits the forest instead of scrolling the page. <code>index.html</code> already has a viewport meta tag.</p>
+
+  <h2>4. Reframe the shot when the screen is tall</h2>
+  <p>The desktop shot is position <code>[0, 2, 12]</code>, <code>fov: 50</code>, target <code>[-2, 1, -3.5]</code>, distance 12–16, polar angle locked at <code>1.51</code>. Keep the target and the locked polar angle. On a portrait phone, pull the eye back and open the vertical lens so the same forest still fits.</p>
+  <table>
+    <tr><th></th><th>xs</th><th>sm</th><th>md</th><th>lg and up</th></tr>
+    <tr><td>camera z</td><td>18</td><td>16</td><td>14</td><td>12</td></tr>
+    <tr><td>fov</td><td>62</td><td>56</td><td>50</td><td>50</td></tr>
+    <tr><td>min / max distance</td><td>14 / 22</td><td>13 / 20</td><td>12 / 18</td><td>12 / 16</td></tr>
+  </table>
+  <p>Use the portrait column when <code>isPortrait</code> is true even if the width is <code>sm</code>. A landscape phone (<code>md</code>, not portrait) can stay on the <code>md</code> row. Recompute azimuth only if you move X or the target. These rows change Z and distance along the same aim, so the azimuth you measured in the landscape-camera lesson still applies.</p>
+
+  <h2>5. Spend fewer triangles where the screen is small</h2>
+  <p><code>TERRAIN_SEGMENTS = 256</code> is a 257×257 grid. Each vertex runs five octaves of noise. Phones do not need that density at a pulled-back camera.</p>
+  <table>
+    <tr><th></th><th>xs</th><th>sm</th><th>md</th><th>lg and up</th></tr>
+    <tr><td>terrain segments</td><td>64</td><td>96</td><td>128</td><td>256</td></tr>
+    <tr><td>trees</td><td>24</td><td>40</td><td>56</td><td>80</td></tr>
+    <tr><td>mushrooms</td><td>40</td><td>80</td><td>110</td><td>160</td></tr>
+    <tr><td>canvas <code>dpr</code></td><td><code>[1, 1.25]</code></td><td><code>[1, 1.5]</code></td><td><code>[1, 1.75]</code></td><td><code>[1, 2]</code></td></tr>
+  </table>
+  <p>Phone pixel ratios are often 3. An uncapped canvas shades several times as many fragments as the desktop one, on a smaller GPU. The <code>dpr</code> cap is the per-frame win. The segment and instance cuts are the memory and vertex win.</p>
+  <p>On the compact tier, stop passing <code>bumpMap</code> in <code>TerrainPBRMaterial</code>. You still upload the five 1K maps; you stop sampling the height map in the lighting shader. Desktop keeps <code>bumpScale={0.06}</code>.</p>
+
+  <h2>6. The HDR and the directional light</h2>
+  <p>There are two lights. They do not cost the same thing, so they do not get the same mobile treatment.</p>
+
+  <h3>Keep the directional light on every breakpoint</h3>
+  <p>In <code>Experience.jsx</code> it is color <code>#ff4f25</code>, intensity <code>0.07 * 0.2</code> (0.014), position <code>[0.56, 0.02, -0.82]</code>. That is a dim orange graze near the horizon, not a sun. One directional light without a shadow map is a few extra multiplies inside <code>MeshStandardMaterial</code>. Removing it on a phone does not change the frame time you can feel, and the forest gets colder than the desktop shot. Copy the same color, intensity, and position into every tier.</p>
+
+  <h3>Keep the HDR as both the sky and the light</h3>
+  <p><code>SceneEnvironment</code> loads <code>rosendal_park_sunset_puresky_1k.hdr</code> and sets <code>background</code>, so drei assigns that texture to <code>scene.background</code> and to <code>scene.environment</code>. Intensities are both <code>0.2</code>. The commented-out ambient light is not in the render. If you drop the HDR on a phone, the materials are left with only the 0.014 directional light. Leave <code>files</code>, <code>background</code>, both intensities, and both rotations alone on every tier.</p>
+  <p><code>resolution</code> on <code>&lt;Environment&gt;</code> does nothing in this file. Drei uses that prop only when <code>Environment</code> has children and renders them into a cube camera. This component passes <code>files</code> and no children, so the loader’s equirectangular HDR is what you see and what lights the meshes. Do not add <code>resolution={128}</code> and expect a smaller map.</p>
+  <p>What you do change:</p>
+  <ul>
+    <li><strong>Fill rate.</strong> The sky is a fullscreen sample of that HDR. The <code>dpr</code> cap in the table above is the mobile cut. Intensity stays <code>0.2</code>, because a lower intensity changes the picture and does not shrink the texture.</li>
+    <li><strong>Startup, only if the 1K file still stalls on a phone.</strong> Add a 512px <code>.hdr</code> of the same sky and choose that URL when <code>isPhone</code> is true. Same intensities, same rotations. That is a smaller download and a smaller upload. It is optional until you have measured a stall. Desktop keeps the 1K file.</li>
+  </ul>
+
+  <h3>Do not turn shadows on below <code>lg</code></h3>
+  <p>The fir and mushroom instanced meshes set <code>castShadow</code> and <code>receiveShadow</code>. The directional light does not set <code>castShadow</code>, and the canvas does not enable a shadow map, so those flags currently draw nothing. Leave it that way through <code>md</code>. A shadow map renders the fir cards and the mushrooms again from the light’s point of view, every frame. If you add shadows later, gate <code>castShadow</code> on the light to the desktop tier.</p>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>In the breakpoint hook, derive phone (≤ 767), compact (≤ 991), and desktop (≥ 992). Add a portrait query. Seed the first render from <code>window.matchMedia</code> so a phone does not mount the desktop scene first.</li>
+    <li>In <code>Experience</code>, call the hook and pass the tier into the canvas, the orbit controls, and <code>Terrain</code>.</li>
+    <li>Set <code>100dvh</code> on <code>html</code>, <code>body</code>, <code>#root</code>, and the canvas. Set <code>touch-action: none</code> on the canvas.</li>
+    <li>Apply the camera table. Keep the orbit target and the locked polar angle.</li>
+    <li>Pass <code>segments</code>, <code>treeCount</code>, and <code>mushroomCount</code> from the quality table. Cap <code>dpr</code>.</li>
+    <li>On the compact tier, omit <code>bumpMap</code>. On desktop, keep it.</li>
+    <li>Leave the directional light’s color, intensity, and position unchanged. Leave the HDR URL, both intensities, and both rotations unchanged. Do not set <code>resolution</code> on this <code>Environment</code>. Do not enable shadow maps below <code>lg</code>.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Write down the flag for 390px, 700px, 844px, and 1280px. Which of those is a landscape phone, and which tier (phone, compact, desktop) should build its terrain?</li>
+    <li>Explain why the first render must not wait for <code>useMediaQuery</code> to update. What gets allocated twice if it does?</li>
+    <li>On paper, say what <code>100vh</code> does to the bottom of the canvas on a phone, and why <code>html</code> and <code>body</code> have to change with the canvas.</li>
+    <li>Name the two jobs of the HDR texture in <code>SceneEnvironment</code>. What is left lighting the terrain if you remove it and leave the directional light?</li>
+    <li>Say why <code>resolution={128}</code> on the current <code>&lt;Environment files&gt;</code> does not shrink the map, and which change actually reduces how many pixels shade the sky.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why is a sideways phone <code>isMd</code>?</li>
+    <li>Which tier keeps <code>TERRAIN_SEGMENTS</code> at 256?</li>
+    <li>Why does portrait need a wider <code>fov</code> even though <code>fov</code> is already a vertical angle?</li>
+    <li>Why does the directional light stay identical on a phone?</li>
+    <li>Which prop on the instanced meshes looks like a shadow and currently is not one?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. A phone held sideways at about 844px wide is:</legend>
+      <label><input type="radio" name="q1" value="a"> <span><code>isSm</code>, because it is still a phone</span></label>
+      <label><input type="radio" name="q1" value="b"> <span><code>isXs</code>, because the height is under 575</span></label>
+      <label><input type="radio" name="q1" value="c"> <span><code>isMd</code>, so it belongs in the compact tier</span></label>
+      <label><input type="radio" name="q1" value="d"> <span><code>isLg</code>, so it keeps the desktop terrain</span></label>
+      <p class="explain"><code>md</code> is 768–991. <code>isXs || isSm</code> stops at 767 and would leave this phone on the desktop scene.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>2. <code>useMediaQuery</code> on the first render:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Reads the real width before the first paint</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Is false, so a phone can build the 256-segment terrain and then build it again</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Throws if you call it outside <code>&lt;Canvas&gt;</code></span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Returns every breakpoint as true</span></label>
+      <p class="explain">Seed the tier from <code>window.matchMedia</code> so the first allocation is the one you keep.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. <code>100dvh</code> belongs on:</legend>
+      <label><input type="radio" name="q3" value="a"> <span><code>html</code>, <code>body</code>, <code>#root</code>, and the canvas, including desktop</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>The canvas only, and only inside a max-width media query</span></label>
+      <label><input type="radio" name="q3" value="c"> <span><code>html</code> and <code>body</code> at <code>100%</code>, canvas at <code>100vh</code></span></label>
+      <label><input type="radio" name="q3" value="d"> <span>The directional light’s helper</span></label>
+      <p class="explain">On desktop the two viewport units match. On a phone, <code>100%</code> parents still follow the large viewport, so the canvas cannot be the only one that changes.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. Portrait needs a larger <code>fov</code> and a larger camera z because:</legend>
+      <label><input type="radio" name="q4" value="a"> <span><code>fov</code> is horizontal, so a tall screen sees less vertically</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The polar angle must be unlocked on a phone</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The HDR is darker on a small screen</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>fov</code> is vertical, so a tall viewport crops the sides of the forest</span></label>
+      <p class="explain">The desktop lens is 50° top to bottom. Portrait keeps that vertical coverage and loses the sides unless you open the lens and step back.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. On a phone you should:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Delete the directional light and keep the HDR</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Keep the directional light as written, and keep the HDR intensities at 0.2</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Drop <code>environmentIntensity</code> to 0 so the HDR stops lighting</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Replace both with the commented-out ambient light</span></label>
+      <p class="explain">The directional light is cheap. The HDR is the sky and the image-based light. Ambient is commented out, so removing the HDR leaves almost no light.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>6. <code>resolution</code> on the current <code>&lt;Environment files&gt;</code>:</legend>
+      <label><input type="radio" name="q6" value="a"> <span>Shrinks the 1K HDR before upload</span></label>
+      <label><input type="radio" name="q6" value="b"> <span>Is the same thing as the canvas <code>dpr</code></span></label>
+      <label><input type="radio" name="q6" value="c"> <span>Is ignored, because this component has no children and does not render a cube camera</span></label>
+      <label><input type="radio" name="q6" value="d"> <span>Turns off <code>scene.background</code></span></label>
+      <p class="explain">Drei’s <code>resolution</code> belongs to the portal path. The sky’s per-frame cost drops when you cap <code>dpr</code>. A smaller <code>.hdr</code> file is a separate, optional download cut.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can place a landscape phone in <code>md</code> and in the compact tier</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say why the first render must already know the tier</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can set <code>100dvh</code> on the whole height chain, including desktop</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can pick segments, counts, <code>dpr</code>, and the portrait camera from the tables</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can explain why the directional light stays and why <code>resolution</code> does not shrink this HDR</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 5/6 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

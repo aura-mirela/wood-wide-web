@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The forest title and the cursor hint</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../procedural/mobile-scene.html">← Phones and tablets</a>
+  <span class="spacer"></span>
+  <a href="../index.html">All lessons</a>
+</nav>
+<main>
+  <p class="meta">UI track · <code>storyboard-2.png</code>, <code>StoryChapter</code>, <code>Action</code>, the same widths as <code>src/breakpoints/</code></p>
+  <h1>The forest title and the cursor hint</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> the words come from <code>public/inspiration/storyboard-2.png</code>. Almost every panel has the same two blocks. A heading and a paragraph sit in the top-left. A round icon and one sentence sit along the bottom-left. Those are <code>StoryChapter</code> and <code>Action</code>. The cards, lists, and diagrams on the board are neither. This lesson is the copy, the two components, and how their size and padding change at the same widths the scene already uses. The first chapter you render is panel 1.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>take the heading and paragraph from a <code>storyboard-2</code> panel and say whether the bottom row is a separate gesture;</li>
+    <li>store that copy in one config, with an icon name and an optional action;</li>
+    <li>render <code>StoryChapter</code> and <code>Action</code> beside the canvas, so a drag still orbits the forest;</li>
+    <li>change padding, type size, and line length at 575, 767, and 991 pixels, matching <code>breakpoints.js</code>.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>public/inspiration/storyboard-2.png</code></td><td>The copy source. The running page does not display this PNG. The older <code>storyboard.png</code> is not the source.</td></tr>
+    <tr><td><code>src/story/storyText.js</code></td><td>Chapter titles, paragraphs, icon names, and optional action sentences. No SVG markup. No font sizes.</td></tr>
+    <tr><td><code>src/App.jsx</code></td><td>Renders <code>&lt;Experience /&gt;</code> only. The overlay is a sibling of the canvas, not a child of it.</td></tr>
+    <tr><td><code>src/breakpoints/breakpoints.js</code></td><td>The widths. The overlay’s CSS media queries use these same numbers.</td></tr>
+    <tr><td><code>src/App.css</code></td><td>Already sets the page to <code>100dvh</code>. The overlay is <code>position: fixed</code> over that box.</td></tr>
+  </table>
+
+  <h2>1. Two blocks, and the parts that are not those blocks</h2>
+  <p><code>StoryChapter</code> is the top block: a heading and one paragraph. It names the moment. <code>Action</code> is the bottom block: a round icon and one sentence. It names the gesture. The icon sits to the left of the sentence, on the same row. “Below” on the board means along the lower edge of the panel, not under the icon.</p>
+  <p>The number in the cell — “1”, “2”, “7” — is the storyboard’s step index. It is not part of the heading.</p>
+  <p>These are not an <code>Action</code>, and they are not a <code>StoryChapter</code>:</p>
+  <ul>
+    <li>the Fly Agaric classification card on panel 2;</li>
+    <li>the mycelium list on panel 5;</li>
+    <li>the spore size card on panel 7;</li>
+    <li>the cycle diagram on panel 10;</li>
+    <li>the closing “Science lives in the details” cell.</li>
+  </ul>
+  <p>Leave those for their own components later. Forcing them into <code>Action</code> turns that component into a switch of special cases.</p>
+
+  <h2>2. The words, and where the bottom row is dropped</h2>
+  <p><code>StoryChapter</code> names the moment. <code>Action</code> is the only line that tells you the gesture, and only when the paragraph does not already tell you. Panel 1 is the chapter you build first:</p>
+  <ul>
+    <li><strong>Title:</strong> Enter the forest</li>
+    <li><strong>Paragraph:</strong> The forest is alive — and so is the fungi beneath your feet. Look around.</li>
+    <li><strong>Action:</strong> Move your cursor or swipe to look around.</li>
+  </ul>
+  <p>Use that action sentence at every width. It already names both the mouse and the swipe.</p>
+  <table>
+    <tr><th>Panel on storyboard-2</th><th>Title</th><th>Bottom action</th></tr>
+    <tr><td>1 Enter the forest</td><td>Keep.</td><td>Keep “Move your cursor or swipe to look around.”</td></tr>
+    <tr><td>2 Click the mushroom</td><td>Rename to “Meet the mushroom”. The title on the board is a gesture.</td><td>None on this board. The tap sentence stays in the paragraph.</td></tr>
+    <tr><td>5 Connect the trees</td><td>Keep.</td><td>Drop it. The paragraph already says to follow the mycelium and click a node.</td></tr>
+    <tr><td>6 Watch the signal</td><td>Keep.</td><td>Drop it. The bottom line repeats the title and the paragraph.</td></tr>
+    <tr><td>7 Click a spore</td><td>Rename to “Examine the spore”. The paragraph becomes a description: “A spore can grow, spread, and start new life.”</td><td>Keep “Tap a spore to activate it.” That is the gesture.</td></tr>
+  </table>
+  <p>Panels 3, 4, 8, 9, 10, and 11 keep both blocks as written on this board. On panels 3 and 4 the paragraph and the bottom line say the same gesture. When you reach those chapters, shorten the paragraph and leave the short line on <code>Action</code>.</p>
+
+  <h2>3. One config, two components</h2>
+  <p><code>storyText.js</code> holds the words and an icon name. It does not hold SVG markup, and it does not hold the rem sizes from the table below. An icon map, a separate small module, turns the name <code>cursor</code> into the SVG. <code>action</code> is optional. <code>Action</code> renders only when that field is present.</p>
+  <pre><code>export const chapters = [
+  {
+    id: 'enter-the-forest',
+    title: 'Enter the forest',
+    body: 'The forest is alive — and so is the fungi beneath your feet. Look around.',
+    action: {
+      icon: 'cursor',
+      label: 'Move your cursor or swipe to look around.',
+    },
+  },
+]</code></pre>
+  <p><code>StoryChapter</code> receives <code>title</code> and <code>body</code>. <code>Action</code> receives <code>icon</code> and <code>label</code>. Which chapter is visible comes from the episode. It does not come from <code>getSceneTier</code>. Breakpoints only change the paint.</p>
+
+  <h2>4. DOM over the canvas, not text in the scene</h2>
+  <p><code>App</code> currently returns only <code>&lt;Experience /&gt;</code>, and <code>Experience</code> returns only <code>&lt;Canvas&gt;</code>. A <code>&lt;Text&gt;</code> or <code>&lt;Html&gt;</code> inside the canvas is attached to a 3D point. Orbiting the camera would slide the title across the forest. This copy is pinned to the screen.</p>
+  <p>Render the overlay next to the canvas:</p>
+  <pre><code>&lt;Experience /&gt;
+&lt;StoryOverlay chapter={chapters[0]} /&gt;</code></pre>
+  <p><code>StoryOverlay</code> renders <code>StoryChapter</code> and, when <code>chapter.action</code> exists, <code>Action</code>. The sentence already says what to do, so the icon’s <code>alt</code> is empty when the icon is an <code>&lt;img&gt;</code>. An inline SVG needs no alt.</p>
+  <p>The overlay covers the viewport and does not take the pointer:</p>
+  <pre><code>position: fixed;
+inset: 0;
+pointer-events: none;</code></pre>
+  <p><code>pointer-events: none</code> is what keeps a drag on the title from eating the orbit. The canvas underneath still receives the swipe. <code>App.css</code> already sets <code>touch-action: none</code> on the canvas.</p>
+
+  <h2>5. One corner for the chapter, the opposite edge for the action</h2>
+  <p>Inside the fixed overlay, <code>StoryChapter</code> is in normal flow at the start. <code>Action</code> is taken out of that flow and pinned to the bottom-left:</p>
+  <pre><code>.story-action {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}</code></pre>
+  <p><code>align-items: center</code> keeps the round icon on the same line as the sentence. On a narrow screen the sentence wraps to two lines and the icon stays centered on that block. It does not jump above the words.</p>
+  <p>Give the chapter a <code>max-width</code> so a wide monitor does not stretch the paragraph into a banner. The storyboard keeps it a short column in the corner. The action stays short enough to sit on one line from <code>sm</code> upward.</p>
+
+  <h2>6. The same widths as the scene</h2>
+  <p><code>breakpoints.js</code> cuts at 575, 767, 991, and 992. The overlay is paint, so it belongs in CSS, not in <code>getSceneTier</code> and not in <code>storyText.js</code>. Copy those cuts into media queries. If the CSS uses a different number, the type will jump at a different width than the terrain.</p>
+  <table>
+    <tr><th></th><th>xs, max 575</th><th>sm, 576–767</th><th>md, 768–991</th><th>lg and up, min 992</th></tr>
+    <tr><td>padding</td><td>1rem</td><td>1.25rem</td><td>1.5rem</td><td>2rem</td></tr>
+    <tr><td>title</td><td>1.35rem</td><td>1.5rem</td><td>1.75rem</td><td>2rem</td></tr>
+    <tr><td>paragraph</td><td>0.9rem</td><td>0.95rem</td><td>1rem</td><td>1.05rem</td></tr>
+    <tr><td>title block max-width</td><td>none</td><td>36rem</td><td>28rem</td><td>26rem</td></tr>
+    <tr><td>icon</td><td>2rem</td><td>2.25rem</td><td>2.5rem</td><td>2.75rem</td></tr>
+  </table>
+  <p>On <code>xs</code> the title block has no max-width, so it uses the width left after padding. It still only occupies the top of the screen. The middle of the forest stays clear. From <code>sm</code> up, the max-width pulls the paragraph back into a column. <code>lg</code>, <code>xl</code>, and <code>xxl</code> share one row: the scene tiers differ, the overlay does not.</p>
+  <p>Add the safe area to the action’s bottom padding so a phone home indicator does not cover the sentence:</p>
+  <pre><code>padding-bottom: max(1rem, env(safe-area-inset-bottom));</code></pre>
+  <p>Use the row’s own padding in place of <code>1rem</code> at each breakpoint. <code>env(safe-area-inset-bottom)</code> is 0 on a desktop, so this line does not move the hint there.</p>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Add <code>storyText.js</code> with the panel 1 chapter above. Include <code>action</code> only when the table says to keep the bottom row.</li>
+    <li>Add <code>StoryChapter</code> and <code>Action</code>. <code>Action</code> looks up the icon name and renders nothing when <code>action</code> is missing.</li>
+    <li>Render <code>StoryOverlay</code> as a sibling of <code>&lt;Experience /&gt;</code>. Pass <code>chapters[0]</code>. Do not mount it inside <code>&lt;Canvas&gt;</code>.</li>
+    <li>Fix the overlay to the viewport and set <code>pointer-events: none</code>. Pin <code>Action</code> to the bottom-left. Keep the icon beside the sentence.</li>
+    <li>Write media queries at <code>max-width: 575px</code>, <code>max-width: 767px</code>, and <code>min-width: 992px</code>, using the padding, type size, max-width, and icon size in the table. Let <code>md</code> be the base styles between 768 and 991.</li>
+    <li>Pad the action with <code>max(…, env(safe-area-inset-bottom))</code>.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>On panel 1 of <code>storyboard-2.png</code>, point at the step index, the chapter title, the paragraph, and the action sentence.</li>
+    <li>Say why panel 7’s title becomes “Examine the spore” while “Tap a spore to activate it.” stays on <code>Action</code>.</li>
+    <li>Say why panels 5 and 6 have no <code>action</code> field.</li>
+    <li>Explain what would move if the title were a <code>&lt;Text&gt;</code> in the canvas and you dragged the orbit.</li>
+    <li>At 390px, 700px, 844px, and 1280px, name the title size and whether the title block has a max-width.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What does <code>StoryChapter</code> render, and what does <code>Action</code> render?</li>
+    <li>Why is the Fly Agaric card not an <code>Action</code>?</li>
+    <li>Why is the overlay a sibling of the canvas?</li>
+    <li>Why is <code>pointer-events</code> set to <code>none</code>?</li>
+    <li>Which breakpoint band shares one overlay style from 992 pixels up?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. The “1” on “Enter the forest” in <code>storyboard-2.png</code> is:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>The heading rendered on the scene</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>The storyboard’s step index</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>The accessible name of the cursor icon</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>The episode number passed into <code>getSceneTier</code></span></label>
+      <p class="explain">Every cell has a number. The scene heading is “Enter the forest”.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. <code>StoryChapter</code> and <code>Action</code> belong:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Inside <code>&lt;Canvas&gt;</code>, as <code>&lt;Html&gt;</code> on a mesh</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>In <code>getSceneTier</code>, next to <code>fov</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span>In a DOM overlay that is a sibling of <code>&lt;Experience /&gt;</code></span></label>
+      <label><input type="radio" name="q2" value="d"> <span>As a texture on the terrain</span></label>
+      <p class="explain">Screen copy stays fixed while the orbit moves the camera. A 3D text node would travel with the view.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. <code>pointer-events: none</code> on the overlay:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Lets a drag fall through to the canvas so the forest still orbits</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Hides the title at the <code>xs</code> breakpoint</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Turns off <code>touch-action</code> on the canvas</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Pins the action to the bottom</span></label>
+      <p class="explain">The action row’s position is separate. <code>pointer-events</code> only decides who receives the swipe.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. The round icon on an action row is:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>Above the sentence, as a stacked caption</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The background of <code>StoryChapter</code></span></label>
+      <label><input type="radio" name="q4" value="c"> <span>A mesh in the scene at the camera target</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>Beside the sentence, in a row pinned to the bottom-left</span></label>
+      <p class="explain">The row is at the bottom of the panel. The icon and the sentence share one line, centered on each other.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. Panels 5 and 6 have no bottom action because:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Those panels have no paragraph</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>The paragraph already states the gesture, so a second line would repeat it</span></label>
+      <label><input type="radio" name="q5" value="c"> <span><code>Action</code> can only be used on panel 1</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>The icon file is missing for those panels</span></label>
+      <p class="explain">“Connect the trees” and “Watch the signal” already tell you what happens. <code>action</code> is omitted, and <code>Action</code> renders nothing.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>6. The media queries must cut at 575, 767, and 992 because:</legend>
+      <label><input type="radio" name="q6" value="a"> <span>Those are the only widths CSS allows</span></label>
+      <label><input type="radio" name="q6" value="b"> <span><code>useMediaQuery</code> cannot read <code>max-width</code></span></label>
+      <label><input type="radio" name="q6" value="c"> <span>They are the cuts in <code>breakpoints.js</code>, so the type and the terrain change together</span></label>
+      <label><input type="radio" name="q6" value="d"> <span>The storyboard PNG is 992 pixels wide</span></label>
+      <p class="explain">A different cut would resize the title while the segment count and <code>dpr</code> stayed on the previous tier. The rem values stay in CSS, not in <code>storyText.js</code>.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="v2-done-1"> <span>You can say what <code>StoryChapter</code> renders and when <code>Action</code> is omitted</span></label></li>
+    <li><label><input type="checkbox" data-persist="v2-done-2"> <span>Panel 1’s words in <code>storyText.js</code> match <code>storyboard-2.png</code>, including the wording changes for panels 2, 5, 6, and 7</span></label></li>
+    <li><label><input type="checkbox" data-persist="v2-done-3"> <span>The overlay is a sibling of the canvas and does not take the pointer</span></label></li>
+    <li><label><input type="checkbox" data-persist="v2-done-4"> <span>The chapter is top-left and the icon sits beside the action sentence at the bottom-left</span></label></li>
+    <li><label><input type="checkbox" data-persist="v2-done-5"> <span>Padding, type size, and max-width follow the table at 575, 767, and 992</span></label></li>
+    <li><label><input type="checkbox" data-persist="v2-done-6"> <span>You scored at least 5/6 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

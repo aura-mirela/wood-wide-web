@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 00 — Setup &amp; first scene</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="01-the-forest-at-night.html">Lesson 01 →</a>
+</nav>
+<main>
+  <p class="meta">Episode: none (foundation) · Tracks: project structure, R3F basics, first GLSL import</p>
+  <h1>Lesson 00 — Setup &amp; first scene</h1>
+
+  <h2>Goal</h2>
+  <p>A fullscreen dark canvas with one glowing test sphere whose color comes from a <code>.glsl</code> file you wrote, lit by nothing (emissive only), with orbit controls. Boring on purpose — this is the skeleton everything else hangs on.</p>
+
+  <h2>Concepts</h2>
+  <ul>
+    <li><strong>R3F is a renderer, not a wrapper.</strong> JSX like <code>&lt;mesh&gt;</code> and <code>&lt;sphereGeometry&gt;</code> creates real three.js objects. Props map to object properties (<code>position</code>, <code>rotation</code>, <code>args</code> for constructor arguments).</li>
+    <li><strong>The render loop.</strong> <code>useFrame((state, delta) =&gt; ...)</code> runs every frame. <code>state.clock.elapsedTime</code> is your global time — you will pass it into almost every shader as a <code>uTime</code> uniform.</li>
+    <li><strong><code>shaderMaterial</code> lifecycle.</strong> A <code>THREE.ShaderMaterial</code> takes <code>vertexShader</code> and <code>fragmentShader</code> strings plus a <code>uniforms</code> object. Changing a uniform's <code>.value</code> is cheap (every frame is fine); recreating the material is expensive.</li>
+    <li><strong>Why <code>vite-plugin-glsl</code>.</strong> It lets you <code>import frag from './test.frag.glsl'</code> and get a string, with <code>#include</code> support so you can share a noise function across shaders instead of pasting it everywhere.</li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Clean the Vite template: empty <code>App.tsx</code>, remove the demo CSS, give <code>html, body, #root</code> 100% height and a near-black background (<code>#0a0a12</code>).</li>
+    <li>Render a <code>&lt;Canvas&gt;</code> with a camera at roughly <code>[0, 2, 8]</code>, fov ~45.</li>
+    <li>Add a <code>&lt;mesh&gt;</code> with <code>sphereGeometry</code> and a <code>meshBasicMaterial</code> first. Confirm you see it. <em>Always get the dumb version on screen before the clever one.</em></li>
+    <li>Create <code>src/shaders/test.vert.glsl</code> and <code>src/shaders/test.frag.glsl</code>:
+      <ul>
+        <li>vertex: standard <code>projectionMatrix * modelViewMatrix * vec4(position, 1.0)</code>, pass <code>uv</code> to the fragment stage as a varying</li>
+        <li>fragment: color from <code>uv</code> plus a <code>uTime</code> uniform pulsing the brightness</li>
+      </ul>
+    </li>
+    <li>Swap the material for a <code>&lt;shaderMaterial&gt;</code> using those imports, and drive <code>uTime</code> from <code>useFrame</code>. Tip: hold the material in a <code>useRef</code> and update <code>ref.current.uniforms.uTime.value</code>.</li>
+    <li>Add drei's <code>&lt;OrbitControls /&gt;</code> so you can inspect everything you build later.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Make the pulse a function of <code>uv.y</code> so the sphere glows from the top down.</li>
+    <li>Break the vertex shader on purpose (multiply position by 0) and read the result. Knowing what "vertex shader is wrong" <em>looks like</em> saves hours later.</li>
+    <li>Add a second uniform <code>uColor</code> (vec3) and control it from a prop.</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What is the difference between an attribute, a uniform, and a varying?</li>
+    <li>Why does updating <code>uniforms.uTime.value</code> not re-render the React tree?</li>
+    <li>In what coordinate space is <code>position</code> inside the vertex shader?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. Every frame you want to animate a shader. The right move is:</legend>
+      <label><input type="radio" name="q1" value="a"> <span><code>setState({ time })</code> so React re-renders the material</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Update <code>material.uniforms.uTime.value</code> inside <code>useFrame</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Recreate the <code>ShaderMaterial</code> with the new time baked in</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Pass time as a vertex attribute</span></label>
+      <p class="explain">Uniform updates are cheap and bypass React entirely; (a) re-renders the tree every frame, (c) recompiles the program.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>2. A varying is:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>A value you set from JavaScript, same for all vertices</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>A per-vertex input like <code>position</code> or <code>uv</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span>A value written in the vertex shader and interpolated across the triangle for the fragment shader</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>A global constant compiled into the shader</span></label>
+      <p class="explain">Attributes are (b), uniforms are (a); a varying is the bridge between the two shader stages.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>3. In the standard line <code>projectionMatrix * modelViewMatrix * vec4(position, 1.0)</code>, <code>position</code> is in:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>World space</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Screen space</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Local (object) space</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Camera space</span></label>
+      <p class="explain"><code>modelViewMatrix</code> carries it local → camera space, <code>projectionMatrix</code> camera → clip space.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>4. <code>&lt;sphereGeometry args={[1, 32, 32]} /&gt;</code> — what is <code>args</code>?</legend>
+      <label><input type="radio" name="q4" value="a"> <span>A drei helper prop</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The constructor arguments of <code>THREE.SphereGeometry</code></span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Shader uniforms</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>Arbitrary userData</span></label>
+      <p class="explain">R3F passes <code>args</code> straight to the three.js constructor.</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Sphere on screen, colored and animated by your own GLSL files</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can explain the path from <code>useFrame</code> → uniform → fragment color</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>Orbit controls work and the page has no scrollbars or white edges</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

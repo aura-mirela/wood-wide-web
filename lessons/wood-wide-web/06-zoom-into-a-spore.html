@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 06 — Zoom into a spore</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <a href="05-signals-through-the-web.html">← Lesson 05</a>
+  <span class="spacer"></span>
+  <a href="07-the-cycle-and-polish.html">Lesson 07 →</a>
+</nav>
+<main>
+  <p class="meta">Tracks: InstancedMesh (the big-spores lesson), scale transitions, postprocessing</p>
+  <h1>Lesson 06 — Zoom into a spore</h1>
+  <p class="episode"><strong>Episode 7: Click a spore.</strong> Dive into the microscopic world — spores up close, textured and alive, floating in a hazy void. See how life continues.</p>
+
+  <h2>Concepts</h2>
+  <ul>
+    <li><strong>InstancedMesh properly.</strong> One geometry + one material + N transforms = one draw call. You set each instance's matrix once (<code>setMatrixAt(i, matrix)</code>, then <code>instanceMatrix.needsUpdate = true</code>). For per-instance <em>behavior</em> (unique wobble phase, size, hue shift), add <strong>instanced buffer attributes</strong> (<code>InstancedBufferAttribute</code>) and read them in the vertex shader — same mental model as point attributes in lesson 03, but now on full geometry.</li>
+    <li><strong>The spore itself, procedurally:</strong> an icosphere displaced by low-frequency fbm (lumpy organic silhouette) + high-frequency noise in the fragment for surface detail, fresnel glow membrane, interior "nucleus" faked with a darker center via <code>normal</code>/<code>view</code> tricks. One good shader × 30 instances with varied seeds = a living cloud where no two spores match.</li>
+    <li><strong>Raycasting instances:</strong> R3F events on <code>InstancedMesh</code> give you <code>event.instanceId</code>. That's how "click <em>a</em> spore" works.</li>
+    <li><strong>The scale transition (the hard, fun part).</strong> You cannot actually shrink the camera. Illusions that work, pick one:
+      <ol>
+        <li><strong>Dolly + fade (simplest).</strong> Fly the camera at the clicked spore (bezier from lesson 03), and as it fills the screen, crossfade (postprocessing or a DOM scrim) into a <em>separate</em> micro-scene group that was hiding at another location / on another layer.</li>
+        <li><strong>Nested scale trick.</strong> The micro-world already exists inside the spore's position but scaled tiny; camera flies "into" it while you scale the world group up around a pivot. Seamless, no cut — harder to keep stable.</li>
+      </ol>
+      Start with 1. If it feels good, try 2 as an experiment.</li>
+    <li><strong>Postprocessing is the microscope.</strong> <code>@react-three/postprocessing</code>: <code>&lt;Bloom&gt;</code> (you've earned it — all those emissives), <code>&lt;DepthOfField&gt;</code> with a shallow focus range (nothing says "microscopic" like razor-thin focus), <code>&lt;Vignette&gt;</code> (replaces your CSS one in 3D-land), subtle <code>&lt;Noise&gt;</code> for film grain. Postprocessing is also the crossfade mechanism for transition #1.</li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Micro-scene group: 20–40 instanced spores drifting in a dark amber haze (fog + big soft background gradient plane). Slow rotation + fbm bob per instance, driven by <code>aSeed</code> in the vertex shader — no CPU per-frame updates.</li>
+    <li>Spore shader: displaced icosphere + fresnel membrane + varied hue per instance (<code>aSeed</code> → slight hue rotation). Verify variety: screenshot 5 spores, they should look like siblings, not clones.</li>
+    <li>Hook click: <code>instanceId</code> → compute that instance's world position → camera bezier toward it → at closest approach, crossfade into the micro scene.</li>
+    <li>In the micro scene, one hero spore slowly germinates: a germ tube (thin tapered tube geometry) extends out of it — scrub tied to scroll. This is "see how life continues" and foreshadows lesson 07.</li>
+    <li>Postprocessing pass for the whole app, tuned per episode (bloom subtle in the forest, strong in the micro world; DOF only in micro). An <code>&lt;Effects&gt;</code> component reading the current episode from state.</li>
+    <li>Back out: a "return" interaction reverses the transition. Both directions must feel intentional.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Benchmark: 10,000 instanced spores vs 10,000 merged static meshes vs 10,000 individual meshes. Measure draw calls (<code>gl.info.render.calls</code> via <code>useThree</code>). Feel the difference in your bones; this is the whole argument for instancing.</li>
+    <li>Per-instance "aliveness": one random spore occasionally twitches. Selecting which one in the shader without CPU: <code>step</code>/<code>mod</code> tricks on <code>aSeed</code> + <code>uTime</code>.</li>
+    <li>Compare the same scene with and without DOF + bloom. Screenshot both. Write one sentence on what each effect contributes. (Taste is trained deliberately.)</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>When does InstancedMesh stop helping? (Hint: what's shared, what can't be?)</li>
+    <li>Why do per-instance attributes beat updating matrices every frame for ambient motion?</li>
+    <li>In transition #1, what exactly is rendered during the crossfade frame — how many scenes, how many passes?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. <code>InstancedMesh</code> draws N copies cheaply because:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>It lowers the polygon count per copy</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>One draw call submits shared geometry once, with per-instance transforms/attributes</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>It caches the framebuffer</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>It uses a simpler shader</span></label>
+      <p class="explain">The saving is draw-call and state-change overhead, not vertex work.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>2. Per-instance idle wobble is best done by:</legend>
+      <label><input type="radio" name="q2" value="a"> <span><code>setMatrixAt</code> for every instance every frame</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>An <code>InstancedBufferAttribute</code> seed read by the vertex shader with <code>uTime</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span>One React component per instance</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Morph targets</span></label>
+      <p class="explain">Zero CPU per frame; matrices stay static while the shader animates around them.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>3. Clicking a specific spore in an <code>InstancedMesh</code> — you know which one via:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>The intersection UV</span></label>
+      <label><input type="radio" name="q3" value="b"> <span><code>event.instanceId</code></span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Comparing distances manually</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>You can't; instances aren't raycastable</span></label>
+      <p class="explain">R3F forwards the raycaster's instance hit index.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>4. "Microscopic" is sold most strongly by which postprocessing choice?</legend>
+      <label><input type="radio" name="q4" value="a"> <span>Strong vignette</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Film grain</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Shallow depth of field — razor-thin focus plane</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>Chromatic aberration</span></label>
+      <p class="explain">Thin focus is the optical signature of microscopy; the others are seasoning.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>5. Instancing stops being the right tool when:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>You exceed 1,000 instances</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Instances need different <em>geometry or materials</em>, not just different transforms/attributes</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Instances move</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>You need shadows</span></label>
+      <p class="explain">Instancing shares geometry + material by definition; vary those and you need separate meshes (or merged/batched approaches).</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Instanced spore cloud, per-instance variation, one draw call (verified)</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>Click a specific spore → seamless-feeling dive into the micro world, and back</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>Episode-tuned postprocessing (bloom everywhere tasteful, DOF micro-only)</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>Germinating hero spore scrubbed by scroll</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

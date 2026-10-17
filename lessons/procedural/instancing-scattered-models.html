@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instancing scattered firs and mushrooms</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="terrain-pbr-material.html">Next: terrain PBR →</a>
+</nav>
+<main>
+  <p class="meta">Procedural track · GLB parts, InstancedMesh, placement matrices</p>
+  <h1>Instancing scattered firs and mushrooms</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> what happens after the scatter helper returns a placement list. <code>ScatteredFirTrees</code> and <code>ScatteredMushrooms</code> do not choose points. They load a GLB, split it into parts, and draw one <code>InstancedMesh</code> per part at those placements.</p>
+  <p>The mask, the seed, and <code>keepPlacementCandidateChance</code> live in the previous lesson. This one starts from the array <code>Terrain</code> already computed.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>say what a placement record contains, and what it does not contain;</li>
+    <li>explain why one GLB becomes several <code>InstancedMesh</code> objects;</li>
+    <li>walk the matrix loop: position, yaw, scale, part offset, <code>setMatrixAt</code>;</li>
+    <li>say why <code>y</code> is negated, and why the same index is used on every part;</li>
+    <li>name the one difference between the fir component and the mushroom component.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Builds <code>treePlacements</code> and <code>mushroomPlacements</code>, then renders both scatter components.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredFirTrees.jsx</code></td><td>Instances <code>fir_tree.glb</code> (trunk + foliage).</td></tr>
+    <tr><td><code>src/3d-components/ScatteredMushrooms.jsx</code></td><td>Same pattern for <code>fly_agaric_mushroom.glb</code>, with a tiny base scale.</td></tr>
+  </table>
+  <p>The two components are copies of one idea. Learn the fir file. The mushroom file is the same shape.</p>
+
+  <h2>1. A placement is a transform, not a mesh</h2>
+  <p>Each item in <code>placements</code> is a plain record:</p>
+  <pre><code>{ x, y, elevation, rotationY, scale }</code></pre>
+  <ul>
+    <li><code>x</code>, <code>y</code> — point on the terrain plane.</li>
+    <li><code>elevation</code> — hill height from <code>getTerrainElevation</code>.</li>
+    <li><code>rotationY</code> — yaw for this copy.</li>
+    <li><code>scale</code> — size variety, <code>0.8 … 1.2</code>.</li>
+  </ul>
+  <p>No geometry, no material, no GLB. <code>Terrain</code> passes <code>treePlacements</code> into <code>ScatteredFirTrees</code> and <code>mushroomPlacements</code> into <code>ScatteredMushrooms</code>. The components only stamp models onto that list.</p>
+
+  <h2>2. Read the GLB into part records</h2>
+  <p><code>useGLTF</code> loads the file and returns a <code>scene</code>. That scene is <strong>not</strong> mounted. It is a source of meshes. A <code>useMemo</code> walks it once and caches an array of plain records, one per mesh:</p>
+  <pre><code>scene.updateMatrixWorld(true)
+scene.traverse((child) => {
+  if (!child.isMesh) return
+
+  meshes.push({
+    geometry: child.geometry,
+    material: child.material,
+    localMatrix: child.matrixWorld.clone(),
+  })
+})</code></pre>
+  <p>For the fir, that array is two records: trunk, then foliage.</p>
+  <pre><code>[
+  { geometry: trunkGeometry, material: trunkMaterial, localMatrix: trunkMatrix },
+  { geometry: foliageGeometry, material: foliageMaterial, localMatrix: foliageMatrix },
+]</code></pre>
+  <p><code>updateMatrixWorld(true)</code> runs first because this scene is never added to the canvas, so the renderer will not refresh it. <code>matrixWorld</code> is where that part sits inside the file. The foliage matrix is what keeps the leaves on the trunk. If you skip the update, <code>matrixWorld</code> can still be the identity and every part instances at the model origin.</p>
+  <p><code>useGLTF.preload(url)</code> at the bottom of the file starts the download when the module is imported, before the component renders. It does not create meshes.</p>
+
+  <h2>3. One <code>InstancedMesh</code> per part</h2>
+  <pre><code>return parts.map((part, index) => (
+  &lt;InstancedTreePart
+    key={index}
+    geometry={part.geometry}
+    material={part.material}
+    localMatrix={part.localMatrix}
+    placements={placements}
+  /&gt;
+))</code></pre>
+  <p>This returns an array of React elements. For the fir: one element for the trunk, one for the foliage. <code>index</code> here is the <strong>part</strong> index (<code>0</code> trunk, <code>1</code> foliage), used only as the React <code>key</code>.</p>
+  <p>Each <code>InstancedTreePart</code> renders:</p>
+  <pre><code>&lt;instancedMesh args={[geometry, material, placements.length]} /&gt;</code></pre>
+  <p><code>geometry</code> and <code>material</code> are the objects taken from the GLB. They are not rebuilt. <code>placements.length</code> is how many copies to allocate. A normal GLB mesh can draw itself once. An <code>InstancedMesh</code> can draw that same geometry many times, one matrix per copy.</p>
+  <p>The mushroom file has three meshes (cap, stem, annulus), so it mounts three <code>InstancedMushroomPart</code> elements. Same <code>placements</code> array on every part.</p>
+
+  <h2>4. Write one matrix per copy</h2>
+  <p>The <code>&lt;instancedMesh&gt;</code> starts with identity matrices: every copy at the origin. A <code>useLayoutEffect</code> fills the buffer before the first draw, so you never see a one-frame pile at the origin. <code>useEffect</code> would run after that paint.</p>
+  <pre><code>placements.forEach((placement, index) => {
+  dummy.position.set(placement.x, placement.elevation, -placement.y)
+  dummy.rotation.set(0, placement.rotationY, 0)
+  dummy.scale.setScalar(placement.scale)
+  dummy.updateMatrix()
+  composed.multiplyMatrices(dummy.matrix, localMatrix)
+  mesh.setMatrixAt(index, composed)
+})</code></pre>
+  <ul>
+    <li><strong><code>dummy</code></strong> is a scratch <code>Object3D</code>. You reuse it so you do not allocate one object per tree.</li>
+    <li><strong>Position</strong> <code>(x, elevation, -y)</code>. The ground mesh is rotated <code>-90°</code> on X, and these instances are <em>siblings</em> of that mesh, so they do not inherit the rotation. A <code>-90°</code> turn around X maps local <code>(x, y, z)</code> to world <code>(x, z, -y)</code>. Height becomes up. The minus sign keeps the forest on the same side of the plane as the hills and the mask.</li>
+    <li><strong>Rotation</strong> is yaw only. X and Z stay <code>0</code> so the trunk stays upright.</li>
+    <li><strong><code>updateMatrix()</code></strong> bakes position, rotation, and scale into <code>dummy.matrix</code>. That is the placement transform.</li>
+    <li><strong><code>composed</code></strong> is that placement multiplied by <code>localMatrix</code>. The part offset is applied first, then the tree is moved onto the hill. <code>composed</code> means “both transforms already combined,” not a third kind of matrix.</li>
+    <li><strong><code>setMatrixAt(index, composed)</code></strong> stores it. This <code>index</code> is the <strong>copy</strong>, not the part. Index <code>1</code> on the trunk and index <code>1</code> on the foliage are the same fir. Only <code>localMatrix</code> differs, so the foliage stays on that trunk.</li>
+  </ul>
+  <p>Then:</p>
+  <pre><code>mesh.instanceMatrix.needsUpdate = true
+mesh.computeBoundingSphere()</code></pre>
+  <p><code>needsUpdate</code> uploads the matrix buffer to the GPU. <code>computeBoundingSphere()</code> rebuilds the sphere used for frustum culling. Without it, the sphere still describes one model at the origin. Orbit away from the origin and Three.js skips the whole forest even though trees are in front of the camera.</p>
+
+  <h2>5. The mushroom difference</h2>
+  <p><code>ScatteredMushrooms</code> uses the same loop. One line changes:</p>
+  <pre><code>dummy.scale.setScalar(placement.scale * MUSHROOM_BASE_SCALE)</code></pre>
+  <p><code>MUSHROOM_BASE_SCALE</code> is <code>0.0035</code>. The Sketchfab file is about 127 units tall. <code>placement.scale</code> is only the <code>0.8–1.2</code> variety. Without the base scale, each “mushroom” is a building. The fir file is already near the right size, so it uses <code>placement.scale</code> alone.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>Load the GLB with <code>useGLTF</code>. Preload the URL at module scope.</li>
+    <li>Force <code>updateMatrixWorld(true)</code>, then collect <code>{ geometry, material, localMatrix }</code> for every mesh.</li>
+    <li>Render one <code>InstancedMesh</code> per part, with <code>args={[geometry, material, placements.length]}</code>.</li>
+    <li>In <code>useLayoutEffect</code>, write <code>(x, elevation, -y)</code>, yaw, and scale, multiply by <code>localMatrix</code>, and <code>setMatrixAt</code>.</li>
+    <li>Set <code>instanceMatrix.needsUpdate</code> and recompute the bounding sphere.</li>
+    <li>If the asset is huge, multiply by a base scale. Measure the bbox before you scatter.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Remove the minus on <code>placement.y</code>. Predict that the forest mirrors across X relative to the hills. Put it back.</li>
+    <li>Skip <code>multiplyMatrices</code> and call <code>setMatrixAt(index, dummy.matrix)</code>. Trunk and foliage should stack at the same origin inside each tree.</li>
+    <li>Comment out <code>computeBoundingSphere()</code>. Orbit until the origin leaves the view. The trees should vanish together.</li>
+    <li>Log <code>parts.length</code> for the fir and for the mushroom. You should see 2 and 3.</li>
+    <li>Set <code>MUSHROOM_BASE_SCALE</code> to <code>1</code> for one reload. Confirm the mushrooms dwarf the terrain, then restore <code>0.0035</code>.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What is in a placement record, and what is deliberately not in it?</li>
+    <li>Why are there two <code>InstancedMesh</code> objects for one fir?</li>
+    <li>Which index is the part, and which index is the copy?</li>
+    <li>Why is <code>placement.y</code> negated?</li>
+    <li>What does <code>localMatrix</code> add that <code>dummy.matrix</code> does not have?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. <code>treePlacements</code> stores:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>One cloned GLB scene per tree</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Only <code>x</code> and <code>y</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span>A transform per copy: position on the plane, elevation, yaw, and scale</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>The trunk geometry and the foliage geometry</span></label>
+      <p class="explain">The list is data. Geometry and material stay on the GLB parts and are shared by every copy.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>2. <code>parts.map</code> in <code>ScatteredFirTrees</code> returns:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>One <code>InstancedMesh</code> for the whole tree, trunk and foliage together</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>An array of React elements, one <code>InstancedTreePart</code> per mesh in the GLB</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Eighty separate <code>&lt;primitive&gt;</code> scenes</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>The placement list</span></label>
+      <p class="explain">Two meshes in the file means two elements. Each element then draws every copy of that one part.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. Index <code>1</code> on the trunk mesh and index <code>1</code> on the foliage mesh are:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>The same fir. Only <code>localMatrix</code> differs</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Two different trees</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>The React <code>key</code> of the part</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Always the tree at the origin</span></label>
+      <p class="explain">Both parts walk the same <code>placements</code> array. The React <code>key</code> on <code>InstancedTreePart</code> is a different index: which part, not which tree.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. <code>dummy.position.set(x, elevation, -y)</code> negates <code>y</code> because:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>GLB files store Z up</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The mask UV flip uses the same minus</span></label>
+      <label><input type="radio" name="q4" value="c"> <span><code>InstancedMesh</code> requires a negative Z</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>The ground is rotated <code>-90°</code> on X, and the instances are not children of that mesh</span></label>
+      <p class="explain">Local <code>(x, y, elevation)</code> becomes world <code>(x, elevation, -y)</code>. Drop the minus and the forest mirrors across X.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. <code>computeBoundingSphere()</code> after <code>setMatrixAt</code>:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Moves each tree onto the hill</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Makes frustum culling use a sphere around every copy, not one model at the origin</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Uploads the GLB file</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Recomputes the terrain vertex normals</span></label>
+      <p class="explain">Culling tests one sphere per <code>InstancedMesh</code>. A stale sphere hides the whole part at once.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can list the five fields on a placement and say they are not a mesh</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say what the <code>parts</code> array holds for the fir</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can walk one copy from <code>dummy.position</code> through <code>setMatrixAt</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You know why trunk index 1 and foliage index 1 are the same tree</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can name the mushroom base scale and why the fir does not need one</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain PBR textures, color space, and tiling</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="landscape-camera.html">Next: landscape camera →</a>
+</nav>
+<main>
+  <p class="meta">Procedural track · useTexture, color space, RepeatWrapping, tiling</p>
+  <h1>Terrain PBR textures, color space, and tiling</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> how <code>TerrainPBRMaterial</code> loads the pine-root maps, why the load callback calls <code>configureTerrainTexture</code>, what <code>SRGBColorSpace</code> and <code>LinearSRGBColorSpace</code> change, and why the repeat count lives in a <code>useLayoutEffect</code> instead.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>name the five maps and which material slot each one fills;</li>
+    <li>say what <code>configureTerrainTexture</code> writes onto a texture;</li>
+    <li>choose <code>SRGBColorSpace</code> or <code>LinearSRGBColorSpace</code> for a new map and say why;</li>
+    <li>explain why wrap and color space are set in the <code>useTexture</code> callback;</li>
+    <li>explain why <code>tiling</code> is applied in <code>useLayoutEffect</code>.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/materials/TerrainPBRMaterial.jsx</code></td><td>Loads the maps, configures them, builds <code>meshStandardMaterial</code>.</td></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Owns <code>TERRAIN_TILING</code> (default <code>8</code>) and passes <code>tiling</code> down.</td></tr>
+    <tr><td><code>public/textures/terrain-textures/</code></td><td>Albedo, AO, height, normal, and roughness PNGs.</td></tr>
+    <tr><td><code>src/lib/createTerrainGeometry.js</code></td><td>Clones <code>uv</code> into <code>uv2</code> so the AO map has a UV set.</td></tr>
+  </table>
+  <p>These maps shade the soil. They are not the scatter masks. The masks stay off the material and only decide where firs and mushrooms may live.</p>
+
+  <h2>1. Five files, five slots</h2>
+  <pre><code>const [albedo, ao, height, normal, roughness] = useTexture(
+  TERRAIN_TEXTURES,
+  (maps) => { /* configure each map */ },
+)</code></pre>
+  <p><code>useTexture</code> loads every URL and returns <code>THREE.Texture</code> objects in the same order as the array. The names are yours. Drei does not know that the second file is ambient occlusion.</p>
+  <table>
+    <tr><th>Texture</th><th>Slot</th><th>What you see</th></tr>
+    <tr><td>albedo</td><td><code>map</code></td><td>The color of the soil.</td></tr>
+    <tr><td>ao</td><td><code>aoMap</code></td><td>Darkens creases. Sampled with <code>uv2</code>.</td></tr>
+    <tr><td>normal</td><td><code>normalMap</code></td><td>Small bumps in the lighting, without moving vertices.</td></tr>
+    <tr><td>roughness</td><td><code>roughnessMap</code></td><td>Where the surface is matte or slightly shiny.</td></tr>
+    <tr><td>height</td><td><code>bumpMap</code></td><td>Extra fine relief. <code>bumpScale={0.06}</code> keeps it subtle so it does not fight the FBM hills.</td></tr>
+  </table>
+  <p><code>metalness</code> is <code>0</code>. This ground is dielectric. <code>roughness={1}</code> is the fallback where the roughness map is dark.</p>
+
+  <h2>2. What <code>configureTerrainTexture</code> does</h2>
+  <pre><code>function configureTerrainTexture(texture, colorSpace) {
+  texture.wrapS = RepeatWrapping
+  texture.wrapT = RepeatWrapping
+  texture.colorSpace = colorSpace
+  texture.needsUpdate = true
+}</code></pre>
+  <ul>
+    <li><strong><code>wrapS</code> / <code>wrapT</code></strong> — what happens past the edge of the image. <code>RepeatWrapping</code> tiles it. The default, clamp, stretches the last pixel. Repeat is required before <code>texture.repeat</code> can tile.</li>
+    <li><strong><code>colorSpace</code></strong> — how Three.js reads the numbers in the file. Passed in per map. See the next section.</li>
+    <li><strong><code>needsUpdate</code></strong> — the texture already exists; this flags WebGL to pick up the new wrap mode and color space.</li>
+  </ul>
+
+  <h2>3. <code>SRGBColorSpace</code> and <code>LinearSRGBColorSpace</code></h2>
+  <p>PNG bytes are not automatically “color.” Three.js must be told whether to gamma-decode them.</p>
+  <p><strong><code>SRGBColorSpace</code></strong> means “these bytes are an sRGB picture.” Mid-gray in the file is not halfway in light energy. Three.js converts the texel to linear light before shading. Use this for maps a person painted as color. In this material that is only the <strong>albedo</strong>.</p>
+  <p><strong><code>LinearSRGBColorSpace</code></strong> means “these bytes are data. Do not gamma-correct them.” A stored <code>0.5</code> stays <code>0.5</code>. Use this for:</p>
+  <ul>
+    <li><strong>AO</strong> — a darkening weight;</li>
+    <li><strong>height</strong> — a bump amount;</li>
+    <li><strong>normal</strong> — a direction, encoded in the RGB channels;</li>
+    <li><strong>roughness</strong> — a <code>0–1</code> material parameter.</li>
+  </ul>
+  <p>If you mark roughness as sRGB, lighting treats a mid value as darker than the texture author stored, and the soil looks uniformly too shiny or too matte. If you mark albedo as linear, the color looks washed out, because the shader skips the sRGB decode the artist expected.</p>
+  <p>The callback applies that split:</p>
+  <pre><code>configureTerrainTexture(albedoMap, SRGBColorSpace)
+configureTerrainTexture(aoMap, LinearSRGBColorSpace)
+configureTerrainTexture(heightMap, LinearSRGBColorSpace)
+configureTerrainTexture(normalMap, LinearSRGBColorSpace)
+configureTerrainTexture(roughnessMap, LinearSRGBColorSpace)</code></pre>
+
+  <h2>4. Why a callback on <code>useTexture</code></h2>
+  <p>The second argument is drei’s onLoad callback. It runs when the textures have finished loading, including when they come from drei’s cache, and it receives the loaded textures.</p>
+  <p>Wrap mode and color space are set there, not in the component body, for two reasons:</p>
+  <ul>
+    <li>Assigning <code>texture.colorSpace</code> during render is a side effect. Render should describe the material, not mutate Three.js objects on every pass.</li>
+    <li>The first frame would otherwise sample the maps with the loader defaults: clamp wrapping and the wrong color space. The ground would flash, then correct itself.</li>
+  </ul>
+  <p>The callback runs once per load. It is the right place for settings that belong to the file. It is the wrong place for <code>tiling</code>, which is a prop and can change later.</p>
+
+  <h2>5. <code>useLayoutEffect</code> sets the repeat</h2>
+  <pre><code>useLayoutEffect(() => {
+  ;[albedo, ao, height, normal, roughness].forEach((texture) => {
+    texture.repeat.set(tiling, tiling)
+  })
+}, [albedo, ao, height, normal, roughness, tiling])</code></pre>
+  <p><code>tiling</code> of <code>8</code> draws each map eight times along U and eight times along V. The same number on every map keeps the pine roots aligned. <code>Terrain</code> owns that number and passes it in. This component only applies it.</p>
+  <p><code>useLayoutEffect</code> runs after React commits the material and before the browser paints. The first frame already has repeat <code>8</code>. A <code>useEffect</code> would paint once at the default repeat of <code>1</code>, then jump. Doing the write in the function body would mutate textures during render.</p>
+  <p>The dependency list re-runs the effect when <code>tiling</code> changes or when the texture objects change. The leading <code>;</code> is only syntax: it stops the line <code>[albedo, ...].forEach</code> from being parsed as a continuation of the previous statement.</p>
+  <p>Repeat does nothing useful until wrap is <code>RepeatWrapping</code>. That is why wrap is set in the load callback, and the repeat count is set here.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>List the five PNG URLs in one array, in slot order.</li>
+    <li>Write <code>configureTerrainTexture</code>: repeat wrap, a color space argument, <code>needsUpdate</code>.</li>
+    <li>Pass that function from the <code>useTexture</code> callback. Albedo gets <code>SRGBColorSpace</code>. The four data maps get <code>LinearSRGBColorSpace</code>.</li>
+    <li>In <code>useLayoutEffect</code>, set <code>texture.repeat</code> from the <code>tiling</code> prop on all five textures.</li>
+    <li>Return <code>meshStandardMaterial</code> with <code>map</code>, <code>aoMap</code>, <code>normalMap</code>, <code>roughnessMap</code>, and <code>bumpMap</code>.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Set the albedo color space to <code>LinearSRGBColorSpace</code>. The soil color should look washed out. Put <code>SRGBColorSpace</code> back.</li>
+    <li>Set the roughness map to <code>SRGBColorSpace</code>. Watch the highlight change, then restore linear.</li>
+    <li>Pass <code>tiling={2}</code> from <code>Terrain</code>. The roots should get larger. Restore <code>8</code>.</li>
+    <li>Comment out <code>RepeatWrapping</code> and keep <code>repeat.set(8, 8)</code>. The tiling should stop working. Restore the wrap.</li>
+    <li>Remove the <code>uv2</code> clone in <code>createTerrainGeometry</code>. AO should stop lining up. Put the clone back.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Which map is a color, and which four are data?</li>
+    <li>What does <code>RepeatWrapping</code> change, and what does <code>texture.repeat</code> change?</li>
+    <li>Why is the color space set in the load callback and the repeat count set in an effect?</li>
+    <li>Why <code>useLayoutEffect</code> rather than <code>useEffect</code> for the repeat?</li>
+    <li>Why does AO need <code>uv2</code> when the other maps use <code>uv</code>?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. <code>configureTerrainTexture</code> sets:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>The repeat count from <code>tiling</code></span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Repeat wrapping, a color space, and <code>needsUpdate</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span>The FBM amplitude</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Which scatter mask to load</span></label>
+      <p class="explain">The repeat count is a separate step, because <code>tiling</code> can change after load.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>2. Albedo uses <code>SRGBColorSpace</code> because:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>It is a color image and must be decoded to linear light before shading</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>It is a data map and must not be gamma-corrected</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>sRGB is required for normal maps</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>It makes the texture tile</span></label>
+      <p class="explain">Roughness, AO, height, and normals stay in <code>LinearSRGBColorSpace</code> so their stored numbers are not treated as color.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>3. The <code>useTexture</code> callback runs:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Every frame, inside <code>useFrame</code></span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Only when <code>tiling</code> changes</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>When the textures have loaded, so wrap and color space are set before the first correct sample</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Instead of returning the textures</span></label>
+      <p class="explain">The hook still returns the five textures. The callback is the onLoad hook.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. Repeat is set in <code>useLayoutEffect</code> so that:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>The color space can change every frame</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The PNG files download faster</span></label>
+      <label><input type="radio" name="q4" value="c"> <span><code>useTexture</code> cannot set any texture property</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>The first paint already uses <code>tiling</code>, and a later prop change can update it</span></label>
+      <p class="explain"><code>useEffect</code> would allow one frame at repeat <code>1</code>. The load callback would not rerun when <code>tiling</code> changes.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. Marking the roughness map as <code>SRGBColorSpace</code>:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Only changes file size</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Gamma-corrects a data value, so the highlight no longer matches the authored roughness</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Is required for <code>bumpMap</code></span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Disables <code>RepeatWrapping</code></span></label>
+      <p class="explain">Roughness is a <code>0–1</code> parameter. sRGB decode changes that number before the lighting model sees it.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can match each PNG to its <code>meshStandardMaterial</code> slot</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say what wrap, color space, and <code>needsUpdate</code> do in <code>configureTerrainTexture</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can choose sRGB or linear for a new map and justify it</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can say why tiling is not set inside the load callback</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

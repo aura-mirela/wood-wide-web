@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 03 — Follow the spores</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <a href="02-meet-the-mushroom.html">← Lesson 02</a>
+  <span class="spacer"></span>
+  <a href="04-the-hidden-network.html">Lesson 04 →</a>
+</nav>
+<main>
+  <p class="meta">Tracks: particles (<code>Points</code> + shader), bezier curves, camera choreography</p>
+  <h1>Lesson 03 — Follow the spores</h1>
+  <p class="episode"><strong>Episode 3: Follow the spores.</strong> The mushroom releases a cloud of spores that drift through the forest; the camera leaves the user's hands and glides after them along a smooth path.</p>
+
+  <h2>Concepts — spores: particles or instances?</h2>
+  <p>Decision rule for this whole project:</p>
+  <ul>
+    <li><strong>Small spores (hundreds–thousands, dots of light):</strong> <code>THREE.Points</code>. One draw call, one vertex per spore, all motion computed in the vertex shader from per-point attributes + <code>uTime</code>. CPU does nothing per frame. They cannot have real shape — each is a camera-facing square you shade into a soft disc.</li>
+    <li><strong>Big spores (a handful, with geometry, lesson 06):</strong> <code>InstancedMesh</code>. One draw call, real 3D geometry per instance, per-instance matrix + custom attributes. Use when a spore must be an <em>object</em> (clickable, lit, textured), not a <em>glow</em>.</li>
+    <li>Rule of thumb: <strong>if it's a light, it's a point; if it's a thing, it's an instance.</strong></li>
+  </ul>
+  <p><strong>GPU-driven particle motion:</strong> don't move particles in JS. Give each point attributes at creation (<code>aSeed</code>, <code>aOffset</code>, <code>aSize</code>) and compute position in the vertex shader as a <em>pure function of time</em>: <code>pos = emitter + rise(t) + curlNoise(seed, t)</code>. Stateless = free rewind/scrub.</p>
+
+  <h2>Concepts — curves</h2>
+  <ul>
+    <li><code>THREE.CubicBezierCurve3</code> — 4 control points, exactly like SVG/CSS easing curves but in 3D. <code>curve.getPoint(t)</code> for position, <code>curve.getTangent(t)</code> for direction, <code>t ∈ [0,1]</code>.</li>
+    <li><code>THREE.CatmullRomCurve3</code> — give it waypoints, it passes <em>through</em> them. Usually nicer for camera paths: you author "stations", it handles smoothness.</li>
+    <li><strong>Arc length matters:</strong> <code>getPoint(0.5)</code> is NOT the halfway point by distance (control points bunch speed up). <code>getPointAt(t)</code> is the arc-length-parameterized version — use it for anything the eye will notice, i.e. the camera.</li>
+    <li><strong>Camera along a curve:</strong> each frame set <code>camera.position = curve.getPointAt(p)</code> and <code>camera.lookAt(target)</code>, where <code>target</code> is <em>its own</em> smoothed point (the spore cloud centroid, or a second slower curve). Never hard-attach lookAt to something jittery.</li>
+    <li><strong>Who owns the camera?</strong> OrbitControls and your curve flight will fight. Introduce a camera-mode state: <code>free | flying | focused</code>. Disable controls (<code>enabled={false}</code>) while flying. This state machine grows into the episode system in lesson 07.</li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Spore burst: <code>BufferGeometry</code> with ~2000 points at the gill ring (random angle, radius ≈ cap radius, y ≈ gill height). Attributes <code>aSeed</code>, <code>aSize</code>.</li>
+    <li>Vertex shader: time-based rise + horizontal noise drift + slow spiral. A <code>uProgress</code> uniform (0→1) drives the whole release so you can trigger it on click, pause it, or scrub it.</li>
+    <li>Fragment shader: soft disc via <code>gl_PointCoord</code>, warm glow color, <code>AdditiveBlending</code>, <code>depthWrite: false</code>. Fade each spore in at birth and out at the end of its arc (alpha from the same time function).</li>
+    <li>Camera path: author 4–6 waypoints in a <code>CatmullRomCurve3</code> from the mushroom clearing, through the trees, ending looking down at the future mycelium ground. Debug-draw the curve as a line while authoring (drei <code>&lt;Line&gt;</code>), with small spheres at waypoints.</li>
+    <li>Flight: on "release" click → camera mode <code>flying</code>, advance <code>p</code> with an ease-in-out (<code>p = smoothstep</code> over a duration, or lerp toward 1). LookAt a point that leads the spore cloud slightly.</li>
+    <li>Scrub option (storyboard says "drag to follow"): map pointer drag or wheel delta to <code>p</code> directly instead of time. Same curve, user-driven. Clamp and smooth (<code>p</code> chases <code>targetP</code>).</li>
+    <li>Hand control back: when <code>p ≥ 1</code>, camera mode → <code>focused</code> on the ground, re-enable (or restrict) controls. Broken camera handoffs are the #1 polish killer — make this seamless before moving on.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Plot <code>getPoint</code> vs <code>getPointAt</code> sample points as spheres on one curve and <em>see</em> the arc-length difference.</li>
+    <li>Give the camera roll: tilt <code>camera.up</code> slightly by the curve's curvature for a banked, organic feel. Subtle.</li>
+    <li>Make 2% of spores brighter "hero" spores whose size pulses — guides where the eye should go during the flight.</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why does stateless (pure-function-of-time) particle motion make scrubbing free?</li>
+    <li>When points bunch in a bezier, what happens to <code>getPoint(t)</code> spacing and why?</li>
+    <li>Why must the spore material not write depth, and what artifact appears if it does?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. 2,000 drifting glowing spores. Best representation:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>2,000 <code>&lt;mesh&gt;</code> components</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>One <code>InstancedMesh</code> with 2,000 sphere instances</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>One <code>Points</code> object, motion computed in the vertex shader</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>A particle library</span></label>
+      <p class="explain">They're lights, not things: one vertex each, GPU-driven, one draw call. (b) works but pays for geometry nobody can see.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>2. "Stateless" particle motion means:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Particles never move</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Position is a pure function of time and per-particle constants, recomputed each frame</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Velocity is stored in a texture</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>The CPU integrates position += velocity each frame</span></label>
+      <p class="explain">No accumulated state; that's what makes scrubbing and rewinding free.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>3. <code>curve.getPoint(0.5)</code> vs <code>curve.getPointAt(0.5)</code>:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Identical</span></label>
+      <label><input type="radio" name="q3" value="b"> <span><code>getPointAt</code> is parameterized by arc length — true halfway by distance</span></label>
+      <label><input type="radio" name="q3" value="c"> <span><code>getPoint</code> is more accurate</span></label>
+      <label><input type="radio" name="q3" value="d"> <span><code>getPointAt</code> only works on bezier curves</span></label>
+      <p class="explain">Control-point spacing distorts <code>t</code>; the eye notices speed changes, so cameras use <code>getPointAt</code>.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>4. The camera flight stutters every time the spore cloud bounces. Root cause:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>The curve has too few points</span></label>
+      <label><input type="radio" name="q4" value="b"> <span><code>lookAt</code> is aimed at a jittery target; aim at a smoothed/lead target instead</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The camera needs a physics body</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>useFrame</code> runs at the wrong priority</span></label>
+      <p class="explain">Never hard-attach lookAt to noisy data; smooth it or lead it.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>5. During the camera flight, OrbitControls must be:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Left enabled, users like control</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Removed from the tree entirely</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Disabled, and re-enabled on handoff — via a camera-mode state</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Replaced with FlyControls</span></label>
+      <p class="explain">Two systems writing the camera fight; a single owner at a time, managed by explicit state.</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Click → spore cloud releases, GPU-animated, scrub-able via <code>uProgress</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>Camera flies a Catmull-Rom path with smooth, lead-the-target lookAt</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>Clean handoff: free → flying → focused with no camera jump</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can explain the particles-vs-instances decision rule in one sentence</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

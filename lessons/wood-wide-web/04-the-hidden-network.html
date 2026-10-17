@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 04 — The hidden network</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <a href="03-follow-the-spores.html">← Lesson 03</a>
+  <span class="spacer"></span>
+  <a href="05-signals-through-the-web.html">Lesson 05 →</a>
+</nav>
+<main>
+  <p class="meta">Tracks: procedural generation (the core lesson), geometry from code, GLSL reveal masks</p>
+  <h1>Lesson 04 — The hidden network</h1>
+  <p class="episode"><strong>Episode 4: Discover the ground.</strong> The camera is low. As the cursor moves over the forest floor, the mycelium wakes up beneath it — a glowing web revealed patch by patch.</p>
+
+  <h2>Concepts</h2>
+  <ul>
+    <li><strong>Grow, don't draw.</strong> The network must come from an algorithm so it looks <em>found</em>, not authored. Two good algorithms, in order of difficulty:
+      <ol>
+        <li><strong>Branching random walk (start here).</strong> Tips walk outward from the mushroom base in small steps; each step adds noise-based turning; each tip has a chance to split; tips die at max length or map edge. Store every segment.</li>
+        <li><strong>Space colonization (upgrade later).</strong> Scatter "nutrient" attraction points; each growth step, every tip moves toward the average of nearby attractors; consumed attractors are removed. Produces the uncanny <em>searching</em> look of real hyphae — and it's the same algorithm you'd use for lightning or roots.</li>
+      </ol>
+    </li>
+    <li><strong>Polyline → renderable geometry.</strong> Options:
+      <ul>
+        <li><code>TubeGeometry</code> per branch (a <code>CatmullRomCurve3</code> through its points) — real 3D, merge them into one <code>BufferGeometry</code> or draw calls will kill you (<code>BufferGeometryUtils.mergeGeometries</code>).</li>
+        <li>Fat lines / ribbons for distant filaments — cheaper.</li>
+        <li>A good scene mixes: tubes near camera, lines far away.</li>
+      </ul>
+    </li>
+    <li><strong>The attribute trick that makes everything later possible:</strong> while growing, record for every vertex <code>aDistance</code> = distance from the network's root along the growth path (graph distance, not straight-line). Bake it as a buffer attribute. Pulses, reveals, and growth animations all become one-line shader math against <code>aDistance</code>.</li>
+    <li><strong>Cursor reveal.</strong> Raycast the pointer against the ground plane each frame → world point → <code>uCursor</code> uniform. Fragment shader: <code>reveal = smoothstep(uRadius, uRadius * 0.4, distance(worldPos, uCursor))</code>, multiply into emissive. Add fbm to the radius edge so the reveal boundary is organic, and lerp <code>uRadius</code> up from 0 so it <em>blooms</em> rather than pops.</li>
+    <li><strong>Persistence (UX choice).</strong> Storyboard says the network "wakes up" — explored areas should stay faintly lit. Cheap version: accumulate visited cursor points into a small render-target texture ("fog of war" style) sampled by the shader. Simple version first: just a trail of the last N cursor positions as uniforms.</li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Write the growth algorithm as a <strong>pure function</strong>: <code>growNetwork(seed, params) → { branches: Vector3[][], nodes: Vector3[] }</code>. No three.js inside; test it by rendering branch polylines with drei <code>&lt;Line&gt;</code> first. Tune: step size, turn angle, split probability, 2.5D flattening (y stays near 0, slight dips).</li>
+    <li>Identify <strong>nodes</strong> (split points + tips) — these become clickable in lesson 05 and are where the network connects to tree roots.</li>
+    <li>Build merged tube geometry. While building, write <code>aDistance</code> per vertex. Verify by coloring the network with <code>aDistance</code> as a gradient — you should see rainbow rings radiating from the root. This debug view is your friend.</li>
+    <li>Shader: dark base, hot emissive core color (ember orange like the inspiration, or green like real foxfire — your call), slight pulse from <code>sin(aDistance * k - uTime)</code> so energy always seems to flow outward.</li>
+    <li>Cursor reveal uniform chain: pointer → raycast ground → <code>uCursor</code>, <code>uRadius</code>. Camera in this episode tilts down when the pointer nears the bottom of the screen (storyboard note) — lerp camera pitch from normalized pointer y.</li>
+    <li>Soil above the web: make the ground from lesson 01 slightly translucent-dark in this mode (<code>uDim</code>), so the network reads as <em>underneath</em>, not painted on.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Expose growth params (split chance, wander, steps) in leva or simple sliders and regrow on change. Ten minutes of play here teaches more than any article.</li>
+    <li>Grow the network <em>over time</em> instead of instantly: reveal by <code>aDistance &lt; uGrowth</code> with a soft edge. You just made a growth animation with zero per-frame CPU work — this is lesson 07's spore-to-mycelium scene already.</li>
+    <li>Try space colonization and compare silhouettes with your random walk.</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why must branch distance be measured along the graph rather than straight-line from the root? What visual bug appears if you cheat?</li>
+    <li>Why merge tube geometries, and what do you lose by merging (hint: per-branch visibility / raycasting granularity)?</li>
+    <li>Where does the cursor→world raycast happen, and why against the ground plane rather than the tube meshes?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. Space colonization grows toward:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>The light source</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>The average direction of nearby attraction points, consuming them as it arrives</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>The camera</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Random directions filtered by noise</span></label>
+      <p class="explain">Tips steer toward unconsumed attractors; the consumption is what creates space-filling, searching growth.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>2. You render 400 separate <code>TubeGeometry</code> meshes and the frame rate dies. The fix:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Lower the tube radius</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Merge them into one BufferGeometry (or few) — the cost was draw calls</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Switch to <code>MeshBasicMaterial</code></span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Turn off shadows</span></label>
+      <p class="explain">Each mesh is a draw call plus state changes; merging collapses them to one.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>3. <code>aDistance</code> must be graph distance (along branches), not straight-line from the root, because otherwise:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>The shader won't compile</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Pulses would appear in rings that cut across branches instead of flowing along them</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>It's slower to compute</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Tube UVs break</span></label>
+      <p class="explain">Energy flows along hyphae; straight-line distance ignores topology, so the animation would ignore the network's shape.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>4. The cursor reveal needs the pointer's position <em>on the ground</em>. You get it by:</legend>
+      <label><input type="radio" name="q4" value="a"> <span><code>event.clientX / window.innerWidth</code></span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Raycasting from the camera through the pointer against the ground plane</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Reading the depth buffer</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>camera.position</code> projected down</span></label>
+      <p class="explain">The standard R3F pattern; against the <em>plane</em> because it's one cheap intersection and gives a stable point even between tubes.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>5. The reveal radius edge looks like a perfect circle — too mechanical. Cheapest organic fix:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Higher resolution geometry</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>A second light</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Perturb the distance threshold with fbm of world position</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Blur the whole screen</span></label>
+      <p class="explain">Noise on the threshold makes the boundary breathe; it's one shader line.</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Network grown by your own algorithm from a seed — regrowable, tunable</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>Single merged geometry with a working <code>aDistance</code> attribute (rainbow debug proven)</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>Cursor-following organic reveal with persistent faint afterglow</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>60fps with the full network on screen</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

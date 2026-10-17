@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A mycelium web of glowing points</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="clickable-mushrooms.html">← Mushrooms you can click</a>
+  <span class="spacer"></span>
+  <a href="../index.html">All lessons</a>
+</nav>
+<main>
+  <p class="meta">Network track · a growing graph, Bézier particles, a point-sprite shader</p>
+  <h1>A mycelium web of glowing points</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> what happens after <code>clickedMushroomIndex</code> changes. <code>MyceliumNetwork</code> grows a small star of links, turns those links into points along curves, and draws the points with a custom shader. Read <a href="clickable-mushrooms.html">Mushrooms you can click</a> first.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>describe the web as nodes and edges, and state the five-neighbor rule;</li>
+    <li>say why the click effect reads refs and writes them before <code>setState</code>;</li>
+    <li>trace one edge from a quadratic Bézier to a <code>Float32Array</code>;</li>
+    <li>read the vertex shader's size, twinkle, and distance term;</li>
+    <li>say what additive blending and <code>depthWrite: false</code> do to overlapping spores.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/3d-components/MyceliumNetwork.jsx</code></td><td>Stores the clicked origins and the edges. Builds the material, the buffers, and the <code>&lt;points&gt;</code>.</td></tr>
+    <tr><td><code>src/lib/buildMyceliumConnections.js</code></td><td>Pure functions: grow a star, list expandable mushrooms, fill particle arrays.</td></tr>
+    <tr><td><code>src/shaders/mycelium-network/vertex.glsl</code></td><td>Point size from attribute, time, and view depth.</td></tr>
+    <tr><td><code>src/shaders/mycelium-network/fragment.glsl</code></td><td>Soft disc: a wide halo and a tight core.</td></tr>
+  </table>
+
+  <h2>1. A graph that only grows outward</h2>
+  <p>Each mushroom index is a node. Each link is an edge <code>{ from, to, length }</code>. <code>clickedMushroomsIndices</code> is the list of mushrooms the player has chosen. <code>myceliumStrands</code> is every edge added so far.</p>
+  <p><code>collectOccupiedNodes</code> puts both lists into one <code>Set</code>: every clicked origin, and both ends of every edge. A mushroom that was only a neighbor is occupied even though the player never clicked it.</p>
+  <p><code>buildNeighborStar</code> runs for the new origin:</p>
+  <ol>
+    <li>Skip mushrooms beyond <code>maxDistance</code>. That radius comes from the breakpoint tier: <code>3.2</code>, <code>2.9</code>, <code>2.7</code>, or <code>3.5</code>.</li>
+    <li>Sort the rest nearest-first.</li>
+    <li>Keep at most <code>MYCELIUM_MAX_NEIGHBORS</code> (<code>5</code>).</li>
+  </ol>
+  <p>If the origin is already occupied, candidates that are also occupied are skipped. The star can only reach mushrooms that are not in the web yet. A brand-new origin is not occupied, so it may attach to mushrooms that already have edges. That is how a later click can join an existing patch, while a click inside the patch keeps growing outward.</p>
+  <p><code>collectExpandableMushroomIndices</code> uses the same rule in reverse. A mushroom is expandable when it has not been clicked and it still has at least one legal neighbor. <code>useLayoutEffect</code> sends that list to <code>Terrain</code> before the browser paints, so the breathing scale can update in the same commit as the new strands.</p>
+
+  <h2>2. Refs so one click stays one click</h2>
+  <p>The growth effect depends on <code>clickedMushroomIndex</code>, <code>placements</code>, and <code>maxDistance</code>. It must also read the edges it has already stored. If those arrays were in the dependency list, appending an edge would run the effect again.</p>
+  <p>Two refs mirror the state. The effect reads <code>clickedMushroomsIndicesRef.current</code>. If this origin is already in that list, it returns. Otherwise it computes the star, writes the next arrays into the refs immediately, then calls <code>setClickedMushroomsIndices</code> and <code>setMyceliumStrands</code>. The ref update is synchronous, so a second run in the same turn still sees the origin as clicked. The <code>setState</code> is what makes React rebuild the buffers.</p>
+
+  <h2>3. Edges become points on a curve</h2>
+  <p><code>buildMyceliumParticleAttributes</code> fills three arrays: <code>positions</code> (xyz), <code>sizes</code>, and <code>phases</code>. They are copied into <code>Float32Array</code>s and attached as buffer attributes. One <code>&lt;points&gt;</code> draws every spore.</p>
+  <p>The function can also drop a large point on chosen nodes (<code>sizes.push(3.1)</code>). <code>MyceliumNetwork</code> passes <code>nodeIndices: []</code>. An empty array is a real value, so the <code>??</code> fallback does not run, and those node points are skipped. Omit the argument and every placement gets a bright point, including mushrooms that are not in the web.</p>
+  <p>For each edge:</p>
+  <ol>
+    <li>Measure the segment on the ground plane. <code>nx, ny</code> is a unit perpendicular: <code>(-dy / length, dx / length)</code>.</li>
+    <li>Place the Bézier control at the midpoint, pushed along that perpendicular by <code>bend</code>. <code>bend</code> is a hash of the two indices, in about <code>±0.15 * length</code> because <code>curveAmount</code> is <code>0.3</code>. The same pair of mushrooms always bows the same way.</li>
+    <li>Sample <code>t</code> from just after <code>0</code> to just before <code>1</code>. <code>quadraticBezier</code> is three lerps: origin to control, control to end, then those two results together.</li>
+    <li>Jitter each sample along the perpendicular. <code>spread</code> is wider near the middle of the strand.</li>
+    <li>Set height from <code>getTerrainElevation(x, y) + 0.06</code>, then store world <code>(x, elevation, -y)</code>. The points follow the hills and sit just above the soil.</li>
+  </ol>
+  <p><code>hash01</code> turns an integer-ish key into a stable value in <code>0…1</code> (<code>sin</code>, then the fractional part). Bend, jitter, size, and twinkle phase all come from it. Nothing extra is stored on the placement.</p>
+  <p>If the strands would exceed <code>maxParticles</code> (<code>18000</code>), spacing is scaled up. The web gets coarser instead of allocating without a cap. With <code>nodeIndices: []</code>, the whole budget is available for edge samples.</p>
+
+  <h2>4. The material is a point sprite</h2>
+  <p><code>vite-plugin-glsl</code> imports each <code>.glsl</code> file as a string. <code>ShaderMaterial</code> is created once in <code>useMemo</code>. A cleanup effect calls <code>material.dispose()</code>.</p>
+  <p>Uniforms are also created once. <code>useFrame</code> writes <code>uniforms.uTime.value = state.clock.elapsedTime</code>. That mutates the object the GPU already reads. It does not call <code>setState</code>, so React does not re-render every frame.</p>
+  <p>The vertex shader runs per point:</p>
+  <ul>
+    <li><code>aSize</code> and <code>aPhase</code> are the attributes from the buffers.</li>
+    <li><code>twinkle</code> is <code>0.2 + 0.18 * sin(uTime * 1.7 + aPhase * 2π)</code>. Each point pulses on its own phase.</li>
+    <li><code>mvPosition.z</code> is view-space depth, negative in front of the camera. <code>attenuation = 190 / max(1, -mvPosition.z)</code> makes nearer points larger in pixels, the way a world-sized object would be.</li>
+    <li><code>gl_PointSize</code> is <code>aSize * twinkle * attenuation</code>, in pixels. <code>gl_Position</code> is the usual projection.</li>
+  </ul>
+  <p>The fragment shader runs per pixel of that square. <code>gl_PointCoord</code> is <code>0…1</code> across the point. Subtract <code>0.5</code> and take the length to get distance from the center. Two Gaussians share that distance: <code>exp(-dist² * 14)</code> is the wide halo, <code>exp(-dist² * 55)</code> is the tight core. Both multiply <code>uColor</code> (<code>#ffc56a</code>). Alpha stays <code>1</code>. The falloff is in the color brightness, which matters once blending is additive.</p>
+
+  <h2>5. How the points sit in the scene</h2>
+  <ul>
+    <li><code>AdditiveBlending</code> adds a spore's color onto whatever is already there. Overlaps get brighter. They do not cover each other with a square.</li>
+    <li><code>transparent: true</code> is what allows that blending. <code>depthWrite: false</code> keeps the points from writing the depth buffer, so a near spore does not punch a hole in the ground or in another spore.</li>
+    <li><code>toneMapped: false</code> leaves the glow outside the renderer's tone mapping, so it stays hot against the night scene.</li>
+    <li><code>frustumCulled={false}</code> draws the cloud even when the geometry bounds are stale or tight.</li>
+    <li><code>raycast={null}</code> keeps the points from taking clicks that belong to the mushroom plane.</li>
+  </ul>
+  <p>The component returns <code>null</code> when there are no placements or no positions. The first frame, before any click, <code>myceliumStrands</code> is empty, so there is nothing to draw.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>On each new <code>clickedMushroomIndex</code>, grow a star of at most five neighbors inside the tier radius. Remember occupied nodes so later clicks grow outward.</li>
+    <li>Mirror the edge list in a ref, update the ref before <code>setState</code>, and keep the arrays out of the effect's dependency list.</li>
+    <li>Publish expandable indices in <code>useLayoutEffect</code>.</li>
+    <li>Sample each edge along a quadratic Bézier, bend and jitter with <code>hash01</code>, and sit the samples on <code>getTerrainElevation</code>.</li>
+    <li>Draw one <code>&lt;points&gt;</code> object. Size the points in the vertex shader. Shape them in the fragment shader. Blend additively and skip depth writes.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Click one mushroom, then click it again. Write down which check returns early, and which ref makes that check see the first click.</li>
+    <li>Set <code>MYCELIUM_MAX_NEIGHBORS</code> to <code>1</code>. Each new click should add at most one strand. Restore <code>5</code>.</li>
+    <li>Set <code>curveAmount</code> to <code>0</code>. The strands should run straight between mushrooms. Restore <code>0.3</code>.</li>
+    <li>Remove <code>nodeIndices: []</code> from the <code>buildMyceliumParticleAttributes</code> call for one reload. A large point should appear on every mushroom, not only on the web. Put the empty array back.</li>
+    <li>In the vertex shader, set <code>attenuation</code> to <code>1.0</code>. Dolly in. The spores should keep a fixed pixel size. Restore <code>190.0 / max(1.0, -mvPosition.z)</code>.</li>
+    <li>Switch <code>blending</code> to <code>NormalBlending</code> and set <code>depthWrite</code> to <code>true</code>. You should see hard squares. Restore additive blending and <code>depthWrite: false</code>.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>When does a clicked mushroom refuse to link to someone who is already in the web?</li>
+    <li>Why is the edge array absent from the growth effect's dependency list?</li>
+    <li>What does <code>nodeIndices: []</code> do that omitting <code>nodeIndices</code> does not?</li>
+    <li>Which three numbers set <code>gl_PointSize</code>?</li>
+    <li>Why can the fragment shader leave alpha at <code>1</code> and still look soft?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. One click adds at most five edges because:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>A mushroom placement only stores five fields</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>The shader has five varyings</span></label>
+      <label><input type="radio" name="q1" value="c"> <span><code>buildNeighborStar</code> sorts by distance and slices to <code>MYCELIUM_MAX_NEIGHBORS</code></span></label>
+      <label><input type="radio" name="q1" value="d"> <span>The point buffer is five floats wide</span></label>
+      <p class="explain">Everyone inside the tier radius is a candidate. Only the nearest five become edges.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>2. The growth effect updates a ref before <code>setState</code> so that:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>A later read in the same turn already sees the origin as clicked</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>The GPU receives the vertex shader</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>React can skip rendering the points</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>The Bézier control point stays at the origin</span></label>
+      <p class="explain">State updates are asynchronous. The ref is the copy the effect trusts on the next enter.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>3. The strand bows sideways because the control point:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Uses <code>placement.elevation</code> as its X</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Is the camera position</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Is pushed along the segment itself</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Sits at the midpoint plus a hashed offset along the perpendicular</span></label>
+      <p class="explain"><code>curveAmount</code> scales that offset. Zero makes the quadratic into a straight line.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>4. <code>gl_PointSize</code> gets larger when the point is closer because:</legend>
+      <label><input type="radio" name="q4" value="a"> <span><code>aPhase</code> stores the distance</span></label>
+      <label><input type="radio" name="q4" value="b"> <span><code>attenuation</code> divides a constant by view-space depth</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The fragment shader changes the vertex position</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>uColor</code> is brighter nearby</span></label>
+      <p class="explain">Point size is in pixels. Dividing by depth is what makes a near spore cover more of the screen.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>5. Overlapping spores brighten instead of drawing solid squares because:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Blending is additive, depth is not written, and the fragment color falls off from the point center</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Each spore is a separate mesh with a circular geometry</span></label>
+      <label><input type="radio" name="q5" value="c"> <span><code>frustumCulled={false}</code> clips the corners</span></label>
+      <label><input type="radio" name="q5" value="d"> <span><code>toneMapped: false</code> changes the point shape</span></label>
+      <p class="explain">The raster square is still a square. The Gaussian and additive blend are what the eye reads as a glow.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can state the occupied-node rule in one sentence</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You clicked the same mushroom twice and can name the early return</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You set <code>curveAmount</code> to 0, saw straight strands, and restored 0.3</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can say what <code>nodeIndices: []</code> suppresses</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can name twinkle, attenuation, and the two Gaussians</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

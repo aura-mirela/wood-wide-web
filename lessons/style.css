@@ -1,0 +1,346 @@
+/* The Fungal Network — lesson pages */
+
+:root {
+  --bg: #0b0b14;
+  --bg-raise: #14141f;
+  --bg-card: #181826;
+  --text: #d8d6e4;
+  --text-dim: #9b97ad;
+  --ember: #ff9d45;
+  --ember-dim: #c9741f;
+  --spore: #ffd9a0;
+  --myco: #7de8a0;
+  --line: #2a2a3d;
+  --correct: #7dd87d;
+  --wrong: #ff8080;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: radial-gradient(1200px 600px at 70% -10%, #1a1430 0%, transparent 60%);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 6rem;
+}
+
+/* ---------- navigation ---------- */
+
+nav.lesson-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+nav.lesson-nav a {
+  color: var(--ember);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+nav.lesson-nav a:hover { text-decoration: underline; }
+
+nav.lesson-nav .spacer { flex: 1; }
+
+/* ---------- typography ---------- */
+
+h1 {
+  font-size: 1.9rem;
+  line-height: 1.25;
+  color: var(--spore);
+  margin: 0.25rem 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+  color: var(--ember);
+  margin: 2.5rem 0 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+h3 { font-size: 1.05rem; color: var(--spore); margin: 1.5rem 0 0.5rem; }
+
+p.meta {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin: 0 0 0.25rem;
+}
+
+p.episode {
+  color: var(--text);
+  background: var(--bg-raise);
+  border-left: 3px solid var(--ember-dim);
+  padding: 0.75rem 1rem;
+  border-radius: 0 8px 8px 0;
+  margin: 1rem 0;
+}
+
+a { color: var(--ember); }
+
+strong { color: #fff; }
+
+em { color: var(--spore); }
+
+ul, ol { padding-left: 1.4rem; }
+
+li { margin: 0.4rem 0; }
+
+li::marker { color: var(--ember-dim); }
+
+code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  color: var(--myco);
+}
+
+pre {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  overflow-x: auto;
+}
+
+pre code { background: none; border: none; padding: 0; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+th { color: var(--ember); font-weight: 600; }
+
+blockquote {
+  margin: 1rem 0;
+  padding: 0.75rem 1.1rem;
+  background: var(--bg-raise);
+  border-left: 3px solid var(--myco);
+  border-radius: 0 8px 8px 0;
+}
+
+blockquote p { margin: 0.35rem 0; }
+
+hr { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
+
+/* ---------- checklists (persisted) ---------- */
+
+ul.checklist { list-style: none; padding-left: 0; }
+
+ul.checklist li { margin: 0.5rem 0; }
+
+ul.checklist label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  cursor: pointer;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+}
+
+ul.checklist label:hover { background: var(--bg-raise); }
+
+ul.checklist input[type="checkbox"] {
+  accent-color: var(--ember);
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  transform: translateY(2px);
+}
+
+ul.checklist input:checked + span {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--ember-dim);
+}
+
+/* ---------- quiz ---------- */
+
+form.quiz fieldset {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-raise);
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem;
+}
+
+form.quiz legend {
+  font-weight: 600;
+  color: var(--spore);
+  padding: 0 0.5rem;
+}
+
+form.quiz label {
+  display: flex;
+  gap: 0.55rem;
+  align-items: baseline;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+form.quiz label:hover { background: var(--bg-card); }
+
+form.quiz input[type="radio"] {
+  accent-color: var(--ember);
+  flex-shrink: 0;
+  transform: translateY(2px);
+}
+
+form.quiz .explain {
+  display: none;
+  margin: 0.6rem 0 0.1rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.92rem;
+  background: var(--bg-card);
+  border-radius: 6px;
+  color: var(--text-dim);
+}
+
+form.quiz fieldset.checked .explain { display: block; }
+
+form.quiz fieldset.checked label.is-answer { outline: 1px solid var(--correct); }
+form.quiz fieldset.checked label.is-answer span { color: var(--correct); }
+form.quiz fieldset.checked label.picked-wrong span { color: var(--wrong); }
+
+form.quiz button {
+  font: inherit;
+  font-weight: 600;
+  color: #16120a;
+  background: var(--ember);
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1.3rem;
+  cursor: pointer;
+}
+
+form.quiz button:hover { background: var(--spore); }
+
+form.quiz .score {
+  display: inline-block;
+  margin-left: 1rem;
+  font-weight: 600;
+  color: var(--spore);
+}
+
+/* ---------- index page extras ---------- */
+
+.focus-card {
+  background: linear-gradient(135deg, #241a10, #1a1426);
+  border: 1px solid var(--ember-dim);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+.focus-card h3 { margin-top: 0.25rem; color: var(--ember); }
+
+.focus-card .updated { color: var(--text-dim); font-size: 0.85rem; }
+
+.lesson-list { list-style: none; padding: 0; }
+
+.lesson-list > li {
+  margin: 0.6rem 0;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.lesson-list label {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+}
+
+.lesson-list input[type="checkbox"] {
+  accent-color: var(--ember);
+  width: 1.1rem; height: 1.1rem;
+  flex-shrink: 0;
+  transform: translateY(2px);
+}
+
+.lesson-list .ep { color: var(--text-dim); font-size: 0.85rem; margin-left: auto; white-space: nowrap; }
+
+.lesson-list a { color: var(--spore); text-decoration: none; font-weight: 600; }
+
+.lesson-list a:hover { color: var(--ember); }
+
+.lesson-list input:checked ~ a { color: var(--text-dim); text-decoration: line-through; }
+
+footer {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1.25rem 3rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.tree-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tree-list .tree-list {
+  padding-left: 1.25rem;
+  margin: 0.4rem 0 0.6rem;
+  border-left: 1px solid var(--line);
+}
+
+.tree-list > li {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.tree-list .tree-list > li {
+  background: var(--bg-card);
+}
+
+.tree-list .role {
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  margin-top: 0.25rem;
+}
+
+.tree-list .props {
+  display: block;
+  color: var(--myco);
+  font-size: 0.9rem;
+  margin-top: 0.35rem;
+}

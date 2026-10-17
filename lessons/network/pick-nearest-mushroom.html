@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picking the nearest mushroom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="growing-mycelium.html">Next: the mycelium web →</a>
+</nav>
+<main>
+  <p class="meta">Network track · screen pixels, the camera, squared distance</p>
+  <h1>Picking the nearest mushroom</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> <code>src/lib/pickNearestMushroom.js</code>. The invisible plane in <code>MushroomHitTargets</code> only receives the pointer. This function turns that event into a placement index. The strands that grow from the index are the next lesson, <a href="growing-mycelium.html">A mycelium web of glowing points</a>.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>say what the function returns, and when it returns <code>null</code>;</li>
+    <li>separate the invisible plane from the mushroom test point;</li>
+    <li>explain why <code>project(camera)</code> needs the camera;</li>
+    <li>convert an NDC coordinate to a canvas pixel;</li>
+    <li>say why the distance comparison uses squares.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>Piece</th><th>Job</th></tr>
+    <tr><td><code>MushroomHitTargets</code></td><td>Invisible plane. Calls this function on click and on move.</td></tr>
+    <tr><td><code>event.pointer</code></td><td>The cursor in normalized device coordinates, about <code>-1…1</code> across the canvas. Passed in as <code>pointerNdc</code>.</td></tr>
+    <tr><td><code>MUSHROOM_PICK_MAX_DISTANCE_PX</code></td><td><code>40</code>. The farthest the cursor can be, in canvas pixels. The <code>= 40</code> on the function parameter is only a fallback when a caller omits the argument.</td></tr>
+    <tr><td><code>onSelect(index)</code></td><td>In <code>Terrain</code>, this is <code>setClickedMushroomIndex</code>.</td></tr>
+  </table>
+
+  <h2>Select the nearest instance</h2>
+  <p><code>pickNearestMushroomIndex</code> does not raycast the hood, the stem, or the annulus. It walks the placement list and keeps the copy whose test point is closest to the cursor, within 40 canvas pixels. Four steps, as they happen in this file:</p>
+  <ol>
+    <li>
+      <strong>Build the world-space position from the placement.</strong>
+      The function does not read it off the <code>instancedMesh</code>. <code>mushroomPoint.set(placement.x, placement.elevation + 0.18, -placement.y)</code> is the same ground point as the instance, lifted into the cap.
+    </li>
+    <li>
+      <strong>Project it with <code>.project(camera)</code>.</strong>
+      <code>mushroomPoint.project(camera)</code> projects that point. In Three.js the result is normalized device coordinates, about <code>-1…1</code>. That is NDC. Before this call, <code>mushroomPoint</code> is still the world position.
+    </li>
+    <li>
+      <strong>Convert those NDC coordinates to canvas pixels.</strong>
+      <code>mushroomCanvasPixelX</code> and <code>mushroomCanvasPixelY</code> use <code>(ndc * 0.5 + 0.5) * size</code>. Y is flipped because canvas Y grows downward. The pointer is converted with the same formula, from <code>pointerNdc</code>.
+    </li>
+    <li>
+      <strong>Compare those pixels with the mouse position on the canvas.</strong>
+      <code>pixelOffsetX</code> and <code>pixelOffsetY</code> are the gap between the mushroom pixels and <code>pointerX</code> / <code>pointerY</code>. Those pointer values come from <code>pointerNdc</code>, not from <code>clientX</code> and <code>clientY</code>. The smallest squared gap that is still within <code>40 * 40</code> wins.
+    </li>
+  </ol>
+
+  <h2>1. The plane is the event target</h2>
+  <p>The instanced mushrooms set <code>raycast={null}</code>, so a click never hits the hood, the stem, or the annulus. The plane is the size of the terrain, lies flat, and sits <code>0.02</code> above the ground. It answers "the pointer is over the ground." It does not know which mushroom that was.</p>
+  <p>This function does not read the point where the ray hit the plane. It compares the cursor with each mushroom.</p>
+
+  <h2>2. One world point per mushroom</h2>
+  <pre><code>mushroomPoint.set(
+  placement.x,
+  placement.elevation + heightOffset,
+  -placement.y,
+)</code></pre>
+  <p><code>heightOffset</code> is <code>0.18</code>. The instances stand at <code>(x, elevation, -y)</code>. This test uses that same ground mapping and lifts the point into the cap. The plane's <code>0.02</code> and this <code>0.18</code> are different heights.</p>
+
+  <h2>3. The camera turns that point into a screen position</h2>
+  <pre><code>mushroomPoint.project(camera)</code></pre>
+  <p><code>project(camera)</code> applies the camera's position, aim, and lens. Orbit or zoom and the same mushroom lands on a different pixel. After this call, <code>mushroomPoint</code> is in normalized device coordinates: <code>x</code> and <code>y</code> about <code>-1…1</code> across the view, and <code>z</code> is depth. Before the call, the same variable still holds the world position from <code>set</code>.</p>
+  <p>A <code>z</code> outside <code>-1…1</code> means the mushroom is outside the camera volume. The loop skips it.</p>
+  <p><code>pointerNdc</code> is already in that <code>-1…1</code> space. The pointer and the mushroom are converted to canvas pixels with the same formula. Screen Y grows downward, so Y is flipped:</p>
+  <pre><code>const pointerX = (pointerNdc.x * 0.5 + 0.5) * width
+const pointerY = (-pointerNdc.y * 0.5 + 0.5) * height
+
+const mushroomCanvasPixelX = (mushroomPoint.x * 0.5 + 0.5) * width
+const mushroomCanvasPixelY = (-mushroomPoint.y * 0.5 + 0.5) * height</code></pre>
+  <p><code>width</code> and <code>height</code> are the canvas size from <code>useThree()</code>. These pixels start at the canvas corner. <code>clientX</code> and <code>clientY</code> start at the browser window's corner. They match when the canvas fills the window and begins at that corner.</p>
+
+  <h2>4. Squared pixel distance</h2>
+  <pre><code>const pixelOffsetX = mushroomCanvasPixelX - pointerX
+const pixelOffsetY = mushroomCanvasPixelY - pointerY
+const squaredPixelDistance = pixelOffsetX * pixelOffsetX + pixelOffsetY * pixelOffsetY</code></pre>
+  <p>The straight-line gap in pixels would be <code>Math.sqrt(squaredPixelDistance)</code>. A gap of 30 pixels is closer than a gap of 50, and <code>900</code> is still less than <code>2500</code>, so the square root would not change which mushroom wins. The loop skips it.</p>
+  <p><code>closestSquaredPixelDistance</code> starts at <code>40 * 40</code>, which is <code>1600</code>. A candidate replaces it only when its squared distance is smaller. Comparing <code>squaredPixelDistance</code> with <code>40</code> would mix pixels squared and pixels. <code>6.3 * 6.3</code> is about <code>40</code>, so that mistake would accept only a gap of about 6 pixels.</p>
+  <p>The function returns the winning index, or <code>null</code> when every mushroom was outside the camera or farther than 40 pixels.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>Convert <code>pointerNdc</code> to canvas pixels. Flip Y.</li>
+    <li>For each placement, write <code>(x, elevation + 0.18, -y)</code> and <code>project(camera)</code>.</li>
+    <li>Skip NDC <code>z</code> outside <code>-1…1</code>.</li>
+    <li>Convert the mushroom to canvas pixels with the same formula as the pointer.</li>
+    <li>Keep the index with the smallest squared pixel distance inside <code>40 * 40</code>.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>On paper, take <code>pointerNdc.x = 0</code> and <code>width = 800</code>. Compute <code>pointerX</code>. You should get <code>400</code>, the middle of the canvas.</li>
+    <li>Take <code>pointerNdc.y = 1</code> and <code>height = 600</code>. Compute <code>pointerY</code>. You should get <code>0</code>, the top of the canvas. <code>y = -1</code> should land at <code>600</code>.</li>
+    <li>Set <code>MUSHROOM_PICK_MAX_DISTANCE_PX</code> to <code>8</code>. Click near a cap, but not on it. The click should miss. Restore <code>40</code>.</li>
+    <li>Change the comparison to <code>squaredPixelDistance &lt;= maxDistancePx</code> for one reload. The accepted gap should shrink to about 6 pixels. Restore <code>maxDistancePx * maxDistancePx</code>.</li>
+    <li>Name the two different heights: the plane's <code>0.02</code> and the picker's <code>0.18</code>. Say which one the function uses.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What does the invisible plane know, and what does this function add?</li>
+    <li>Why does <code>project</code> take the camera?</li>
+    <li>What does an NDC <code>z</code> outside <code>-1…1</code> mean?</li>
+    <li>Why is the limit <code>40 * 40</code> and not <code>40</code>?</li>
+    <li>When do canvas pixels and <code>clientX</code> / <code>clientY</code> differ?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. The invisible plane:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>Stores one point per mushroom</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Receives the pointer. This function then chooses a mushroom</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Is the bounding sphere from <code>computeBoundingSphere</code></span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Draws the hood, stem, and annulus</span></label>
+      <p class="explain">The mushrooms set <code>raycast={null}</code>. The plane is the event target. The picker never reads the ray's hit point on the plane.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>2. <code>mushroomPoint.project(camera)</code>:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Moves the mushroom to <code>y = 0.02</code></span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Reads <code>clientX</code> and <code>clientY</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Builds the instance matrix</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Finds where that world point appears on screen for this camera</span></label>
+      <p class="explain">Position, aim, and lens all change the pixel. Orbiting moves the mushroom on the canvas without moving its placement.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. <code>pointerNdc</code> and <code>mushroomPoint</code> after <code>project</code> are:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Both in about <code>-1…1</code>, then both converted to canvas pixels</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Both already in window pixels (<code>clientX</code>, <code>clientY</code>)</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>The pointer in pixels and the mushroom in world units</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Both distances along the terrain</span></label>
+      <p class="explain">The shared formula <code>(x * 0.5 + 0.5) * width</code> is what puts them in one pixel space. Y is flipped because screen Y grows downward.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>4. <code>closestSquaredPixelDistance</code> starts at <code>40 * 40</code> because:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>There are 40 mushrooms</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The canvas is 40 pixels wide</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The loop compares squared pixel gaps, so the limit must be squared too</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>0.18 * 0.18</code> is the cap height</span></label>
+      <p class="explain">Squaring preserves which gap is smaller, so <code>Math.sqrt</code> is unnecessary. The limit has to use the same units.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. The function returns <code>null</code> when:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>The mushroom is not in <code>expandableMushroomsIndices</code></span></label>
+      <label><input type="radio" name="q5" value="b"> <span>No mushroom is inside the camera and within 40 canvas pixels</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>The invisible plane is at <code>y = 0.02</code></span></label>
+      <label><input type="radio" name="q5" value="d"> <span><code>placement.scale</code> is below 1</span></label>
+      <p class="explain">Breathing and the web come later. This function only searches placements against the cursor.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can say what the plane does and what <code>project(camera)</code> does</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You computed <code>pointerX</code> for a pointer at <code>x = 0</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can explain <code>40 * 40</code> in one sentence</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You narrowed the radius to 8 pixels, saw the miss, and restored 40</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can name <code>0.02</code> and <code>0.18</code> separately</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

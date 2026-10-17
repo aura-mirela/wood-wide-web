@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 01 — The forest at night</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <a href="00-setup-and-first-scene.html">← Lesson 00</a>
+  <span class="spacer"></span>
+  <a href="02-meet-the-mushroom.html">Lesson 02 →</a>
+</nav>
+<main>
+  <p class="meta">Tracks: GLSL (noise, fog), procedural generation (ground, trees), first CSS atmosphere</p>
+  <h1>Lesson 01 — The forest at night</h1>
+  <p class="episode"><strong>Episode 1: Enter the forest.</strong> The environment is alive — subtle movement, moonlight, fog, fireflies. No interaction yet; the scene must earn attention on its own.</p>
+
+  <h2>Concepts</h2>
+  <ul>
+    <li><strong>Noise is the engine of everything procedural.</strong> Value noise / simplex noise gives you smooth randomness; <strong>fbm</strong> (fractal Brownian motion) stacks octaves of it for natural detail. You will reuse one <code>noise.glsl</code> include across the ground, the fog, the mushroom cap, and the mycelium. Read Book of Shaders ch. 11–13 before building.</li>
+    <li><strong>Displacement.</strong> A flat <code>PlaneGeometry</code> with many segments + vertex shader moving <code>position.y</code> by fbm = terrain. The normal is now wrong; for a dark night scene you can fake lighting from height instead of recomputing normals.</li>
+    <li><strong>Procedural trees without models.</strong> At night, silhouettes are enough: tapered cylinders (trunks) + stacked cones or billboarded blobs (canopy), placed by a seeded random function, scaled by noise. Distant trees can be a single ring of dark cardboard-cutout planes — nobody can tell at night.</li>
+    <li><strong>Fog two ways.</strong> three.js built-in <code>&lt;fog&gt;</code>/<code>&lt;fogExp2&gt;</code> tints by camera distance (cheap, global). A custom ground-hugging fog is a big transparent plane whose fragment alpha = fbm drifting over time, faded by height. Use both: exp2 for depth, the plane for the creeping graveyard layer.</li>
+    <li><strong>Fireflies.</strong> Your first <code>Points</code> + shader: <code>gl_PointSize</code> by distance, soft round sprite via <code>distance(gl_PointCoord, vec2(0.5))</code>, each point blinking on its own phase from a random per-point attribute.</li>
+    <li><strong>CSS atmosphere.</strong> A vignette is one <code>div</code> with a radial-gradient overlay, <code>pointer-events: none</code>. Title text fades in with a CSS transition. The 3D scene and the DOM are two layers of the same composition.</li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li><code>src/shaders/includes/noise.glsl</code> — take a known-good simplex/value noise implementation, add an <code>fbm()</code> on top. This file is sacred; everything imports it with <code>#include</code>.</li>
+    <li>Ground: plane ~60×60 with 256+ segments, rotated flat, vertex displacement by fbm. Fragment: height-based color ramp from near-black soil to moonlit blue-grey. Add a <code>uMoonDir</code> uniform and brighten faces by <code>dot(fakeNormal, uMoonDir)</code> if you want to try normals from height (sample fbm at neighboring points — this is a great exercise).</li>
+    <li>Moon: a circle or sphere far away, emissive white-blue; give it a halo with a slightly larger transparent plane whose alpha falls off radially.</li>
+    <li>Trees: one <code>&lt;Trunk&gt;</code> component (cylinder, dark material), scatter 40–80 with seeded randomness (hash-based, not <code>Math.random</code>, so the forest is stable across reloads). Keep a clearing in the middle — the mushroom lives there later.</li>
+    <li>Fog: <code>&lt;fogExp2 color="#0a0a16" density={0.045}&gt;</code> first. Then the low fog plane with drifting fbm alpha. Watch transparency sorting: render the fog plane last (<code>renderOrder</code>), <code>depthWrite={false}</code>.</li>
+    <li>Fireflies: ~100 points in a box above the ground. Attributes: <code>aPhase</code>, <code>aSpeed</code>. Blink with <code>smoothstep(0.9, 1.0, sin(uTime * aSpeed + aPhase))</code>.</li>
+    <li>DOM layer: vignette div + title ("The forest is alive — look around") that fades out after a few seconds or on first pointer move.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Make wind: add <code>uTime</code>-scrolled noise to the firefly positions and a gentle sway to tree tops (bend by height² in the vertex shader).</li>
+    <li>Color-grade night properly: desaturate everything except the fireflies. (Preview of the Purkinje effect — human night vision loses color.)</li>
+    <li>Try <code>react-responsive</code>: on a narrow screen, lower segment counts and firefly count. This is your performance fallback pattern for the whole project.</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why is fbm "noise stacked on noise", and what do octaves/lacunarity/gain do?</li>
+    <li>Why must the fog plane not write depth?</li>
+    <li>Why seeded randomness instead of <code>Math.random()</code> for placement?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. fbm gets its natural look by:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>Using a better random number generator</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Summing several octaves of noise, each at higher frequency and lower amplitude</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Blurring white noise</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Multiplying two noise samples together</span></label>
+      <p class="explain">Octaves + lacunarity (frequency step) + gain (amplitude step).</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>2. Your displaced terrain looks flat-shaded wrong because:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>The GPU lost precision</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>PlaneGeometry can't be displaced</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>The normals still describe the flat plane, not the displaced surface</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>fbm is not differentiable</span></label>
+      <p class="explain">Displacement happens in the vertex shader; normals must be recomputed or faked (e.g. from neighboring fbm samples).</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>3. The ground-fog plane shows hard rectangular seams where it intersects trees. Most likely fix:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>More segments on the fog plane</span></label>
+      <label><input type="radio" name="q3" value="b"> <span><code>depthWrite={false}</code> and render it after opaque objects</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Lower the fog opacity</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Use <code>fogExp2</code> instead</span></label>
+      <p class="explain">Transparent surfaces writing depth clip what renders behind/through them.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>4. Trees are placed with <code>Math.random()</code>. On every reload the forest changes. Why is a hash/seeded function better?</legend>
+      <label><input type="radio" name="q4" value="a"> <span>It's faster</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>It produces prettier distributions</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The layout becomes deterministic, so you can art-direct and debug it</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>Math.random()</code> is biased</span></label>
+      <p class="explain">Stable worlds are debuggable and tunable; randomness you can't reproduce is a bug you can't reproduce.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>5. Each firefly blinks on its own rhythm. The per-firefly phase should live in:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>A uniform array updated every frame</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>React state per firefly component</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>A buffer attribute (<code>aPhase</code>) set once at creation</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>A texture sampled by position</span></label>
+      <p class="explain">Constant per-point data is exactly what attributes are for; the GPU reads it with zero per-frame cost.</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Terrain, moon, trees, two kinds of fog, blinking fireflies — all procedural</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>One shared <code>noise.glsl</code> include used by at least two shaders</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>The scene reads as <em>calm and alive</em> with no interaction at all</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

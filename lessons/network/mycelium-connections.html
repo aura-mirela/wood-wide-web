@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the mycelium connections are built</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="growing-mycelium.html">Next: the glowing points →</a>
+</nav>
+<main>
+  <p class="meta">Network track · pure functions, then the component that calls them</p>
+  <h1>How the mycelium connections are built</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> <code>src/lib/buildMyceliumConnections.js</code>, and the three places <code>MyceliumNetwork</code> calls it. The library decides neighbors, who can still grow, and where the points sit. The component stores the clicks, owns the distance for this screen, and draws the points. The shader that makes those points glow is <a href="growing-mycelium.html">A mycelium web of glowing points</a>.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>name the three exported functions and the one call site for each;</li>
+    <li>state the five-neighbor rule and the outward-growth rule;</li>
+    <li>say why a clicked mushroom leaves the breathing list while a neighbor can stay;</li>
+    <li>trace one edge from a quadratic Bézier into the three <code>Float32Array</code>s;</li>
+    <li>say what <code>nodeIndices: []</code> changes.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/lib/buildMyceliumConnections.js</code></td><td>Plain functions. No React, no scene graph. Inputs go in, data comes out.</td></tr>
+    <tr><td><code>src/3d-components/MyceliumNetwork.jsx</code></td><td>React state (<code>clickedMushroomsIndices</code>, <code>myceliumStrands</code>), the tier distance, and the <code>&lt;points&gt;</code>.</td></tr>
+    <tr><td><code>Terrain</code></td><td>Passes <code>clickedMushroomIndex</code> in and receives <code>expandableMushroomsIndices</code> back.</td></tr>
+  </table>
+
+  <h2>The library does the math. The component keeps the story.</h2>
+  <p><code>MyceliumNetwork</code> imports three functions:</p>
+  <pre><code>import {
+  buildMyceliumParticleAttributes,
+  buildNeighborStar,
+  collectExpandableMushroomIndices,
+} from '../lib/buildMyceliumConnections'</code></pre>
+  <ol>
+    <li><code>buildNeighborStar</code> runs in the click effect. The origin it receives is <code>clickedMushroomIndex</code>. It returns <code>{ myceliumStrands, nodeIndices }</code>. The component keeps <code>star.myceliumStrands</code>.</li>
+    <li><code>collectExpandableMushroomIndices</code> runs in <code>useMemo</code> after the click lists change. Its array is what <code>onExpandableChange</code> sends to <code>Terrain</code>, and what the mushrooms use for breathing.</li>
+    <li><code>buildMyceliumParticleAttributes</code> runs in another <code>useMemo</code>. It turns <code>myceliumStrands</code> into <code>positions</code>, <code>sizes</code>, and <code>phases</code>. Those become the buffer attributes on <code>&lt;points&gt;</code>.</li>
+  </ol>
+  <p><code>maxDistance</code> is not inside the library. <code>MyceliumNetwork</code> picks it from the breakpoint tier: <code>3.2</code>, <code>2.9</code>, <code>2.7</code>, or <code>3.5</code>. <code>collectOccupiedNodes</code> is also in the component. It builds the set of mushrooms already in the web: every clicked origin, plus both ends of every edge. That set is an argument to the first two library functions.</p>
+
+  <h2>1. A star of at most five neighbors</h2>
+  <p><code>buildNeighborStar(placements, originIndex, maxDistance, occupiedNodes)</code> uses the parameter name <code>originIndex</code>. At the call site that value is <code>clickedMushroomIndex</code>. Inside the function it means "the mushroom this star grows from."</p>
+  <p>Distance is on the flat map, <code>Math.hypot(a.x - b.x, a.y - b.y)</code>. Elevation is ignored. Candidates inside <code>maxDistance</code> are sorted nearest first, then cut to <code>MYCELIUM_MAX_NEIGHBORS</code>, which is <code>5</code>. Each kept candidate becomes <code>{ from, to, length }</code>.</p>
+  <p>If the origin is already in <code>occupiedNodes</code>, candidates that are also occupied are skipped. The star can only reach mushrooms that are not in the web yet. A brand-new origin is not occupied yet, so it may attach to mushrooms that already have edges. A later click can join an existing patch. A click on a mushroom that is already in the patch grows outward.</p>
+  <p>The component then appends <code>clickedMushroomIndex</code> to <code>clickedMushroomsIndices</code> even when the star has no edges. It appends <code>star.myceliumStrands</code> only when that array is not empty. A second click on the same index returns early, because <code>clickedMushroomsIndicesRef</code> already contains it. That check lives in the component, not in the library.</p>
+
+  <h2>2. Who can still breathe</h2>
+  <p><code>collectExpandableMushroomIndices</code> asks the same question for every mushroom: "if this one were clicked now, would <code>buildNeighborStar</code> find at least one neighbor?" The loop variable is also named <code>originIndex</code>. Here it walks every placement. It is not <code>clickedMushroomIndex</code>.</p>
+  <ul>
+    <li>A mushroom already in <code>clickedMushroomsIndices</code> is skipped. That is why a clicked mushroom stops breathing.</li>
+    <li>A mushroom that is occupied but was not clicked — a neighbor at the end of an edge — stays in the list when it can still reach someone outside the web.</li>
+    <li>A mushroom outside the web stays in the list when anyone is within <code>maxDistance</code>, including mushrooms that are already connected.</li>
+  </ul>
+  <p>The function returns a new array. It does not delete from the previous one. <code>useLayoutEffect</code> passes that array to <code>onExpandableChange</code> before the browser paints.</p>
+
+  <h2>3. Edges become points on a curve</h2>
+  <p><code>buildMyceliumParticleAttributes</code> fills three arrays and copies them into <code>Float32Array</code>s. <code>positions</code> holds <code>x, y, z</code> for each point. <code>sizes</code> and <code>phases</code> are one number per point. The shader later reads those as <code>aSize</code> and <code>aPhase</code>.</p>
+  <p>The function can also drop a large point on chosen nodes (<code>sizes.push(3.1)</code>). <code>MyceliumNetwork</code> passes <code>nodeIndices: []</code>. An empty array is a real value, so the <code>??</code> fallback does not run, and those node points are skipped. Omit the argument and every placement gets a bright point, including mushrooms that are not in the web.</p>
+  <p>For each edge the code works on the ground plane:</p>
+  <ol>
+    <li><code>nx, ny</code> is a unit perpendicular of the segment: <code>(-dy / length, dx / length)</code>.</li>
+    <li>The Bézier control sits at the midpoint, pushed along that perpendicular. <code>hash01</code> of the two indices picks the side and the amount. <code>curveAmount</code> is <code>0.3</code>, so the same pair of mushrooms always bows the same way.</li>
+    <li><code>quadraticBezier</code> is three lerps: start to control, control to end, then those results together. Samples stay between <code>t = 0.02</code> and <code>t = 0.98</code>.</li>
+    <li>Each sample is jittered along the perpendicular. The spread is wider near the middle.</li>
+    <li>Height is <code>getElevation(x, y) + 0.06</code>. <code>MyceliumNetwork</code> passes <code>getTerrainElevation</code>, so the points follow the hills. World position is <code>(x, elevation, -y)</code>.</li>
+  </ol>
+  <p><code>hash01</code> turns a number into a stable value in <code>0…1</code> by taking the fractional part of a sine. Bend, jitter, size, and phase all come from it. Nothing extra is stored on the placement.</p>
+  <p>If the strands would exceed <code>maxParticles</code> (<code>18000</code>), spacing grows from <code>0.14</code>. The web gets coarser instead of allocating without a cap. With <code>nodeIndices: []</code>, that whole budget is available for the curve samples.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>On a new <code>clickedMushroomIndex</code>, call <code>buildNeighborStar</code> with the tier distance and the occupied set. Keep at most five edges.</li>
+    <li>Store the origin in <code>clickedMushroomsIndices</code> and append the new edges to <code>myceliumStrands</code>.</li>
+    <li>Recompute expandable indices with the same occupied set and the clicked list. Send that array to <code>Terrain</code>.</li>
+    <li>Call <code>buildMyceliumParticleAttributes</code> with <code>getTerrainElevation</code> and <code>nodeIndices: []</code>.</li>
+    <li>Attach <code>positions</code>, <code>sizes</code>, and <code>phases</code> to one <code>&lt;points&gt;</code> object.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>In <code>MyceliumNetwork</code>, find the three call sites. Write which state array each one reads, and which prop or buffer its result becomes.</li>
+    <li>Click one mushroom, then click it again. The early return is <code>clickedMushroomsIndicesRef.current.includes(clickedMushroomIndex)</code>. That check is not inside <code>buildNeighborStar</code>.</li>
+    <li>Set <code>MYCELIUM_MAX_NEIGHBORS</code> to <code>1</code>. Each new click should add at most one strand. Restore <code>5</code>.</li>
+    <li>Set <code>curveAmount</code> to <code>0</code>. The strands should run straight. Restore <code>0.3</code>.</li>
+    <li>Remove <code>nodeIndices: []</code> for one reload. A large point should appear on every mushroom. Put the empty array back.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Which decisions does the library make, and which does <code>MyceliumNetwork</code> make?</li>
+    <li>When can a clicked mushroom link to a mushroom that is already in the web?</li>
+    <li>Why can a neighbor keep breathing after the strand to it exists?</li>
+    <li>What does <code>nodeIndices: []</code> suppress?</li>
+    <li>Why is <code>hash01</code> used instead of <code>Math.random</code>?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. <code>buildNeighborStar</code> is called with:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>The shader strings and <code>uTime</code></span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Only <code>clickedMushroomsIndices</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span><code>clickedMushroomIndex</code>, the tier <code>maxDistance</code>, and the occupied set</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>The canvas pointer in pixels</span></label>
+      <p class="explain">The component owns the click and the distance. The function returns the new edges.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>2. A mushroom stops breathing when:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Its index is in <code>clickedMushroomsIndices</code>, so <code>collectExpandableMushroomIndices</code> skips it</span></label>
+      <label><input type="radio" name="q2" value="b"> <span><code>buildMyceliumParticleAttributes</code> sets its size to 0</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>It is the <code>to</code> end of any edge</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>The tier distance changes</span></label>
+      <p class="explain">Being the end of an edge marks it occupied. It can still breathe if it can reach a mushroom outside the web.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>3. The strand bows sideways because:</legend>
+      <label><input type="radio" name="q3" value="a"> <span><code>getTerrainElevation</code> pushes X</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>The camera position is the control point</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>The control point slides along the segment</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>The control point is the midpoint plus a hashed offset along the perpendicular</span></label>
+      <p class="explain"><code>curveAmount</code> scales that offset. Zero makes the quadratic a straight line.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>4. <code>nodeIndices: []</code> means:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>No strands are drawn</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The large point on each listed node is skipped. An omitted argument would mark every placement</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The occupied set is empty</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>maxParticles</code> becomes 0</span></label>
+      <p class="explain"><code>??</code> replaces <code>null</code> or <code>undefined</code> only. An empty array is a real "draw none of these."</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>5. <code>hash01</code> is used so that:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>The click handler can skip a repeat tap</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>React skips a render</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>The same edge always gets the same bend, jitter, size, and phase</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>The tier distance stays constant</span></label>
+      <p class="explain">It is a pure function of its input. <code>Math.random</code> would change the strand on every rebuild.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can point at the three call sites in <code>MyceliumNetwork</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can state the outward-growth rule in one sentence</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You set <code>MYCELIUM_MAX_NEIGHBORS</code> to 1, saw one strand, and restored 5</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You set <code>curveAmount</code> to 0, saw straight strands, and restored 0.3</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can say what <code>nodeIndices: []</code> suppresses</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

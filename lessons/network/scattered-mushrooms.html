@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How ScatteredMushrooms works</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="clickable-mushrooms.html">Next: the click state →</a>
+</nav>
+<main>
+  <p class="meta">Network track · one file, from the GLB to the click</p>
+  <h1>How <code>ScatteredMushrooms</code> works</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> every part of <code>src/3d-components/ScatteredMushrooms.jsx</code>. The file draws the fly agaric copies and turns a pointer event into a mushroom index. It does not choose where the mushrooms stand, and it does not grow the mycelium. Those jobs belong to <code>Terrain</code> and <code>MyceliumNetwork</code>. <a href="clickable-mushrooms.html">Mushrooms you can click</a> follows the state after this file reports an index.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>name the three props and say which one this file is allowed to call;</li>
+    <li>walk from <code>useGLTF</code> to one <code>InstancedMushroomPart</code> per mesh;</li>
+    <li>read one frame of the matrix loop: position, yaw, scale, part offset, <code>setMatrixAt</code>;</li>
+    <li>separate the three factors in the scale: placement variety, <code>MUSHROOM_BASE_SCALE</code>, and breath;</li>
+    <li>say what the invisible plane knows, and what <code>pickNearestMushroomIndex</code> adds.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/3d-components/ScatteredMushrooms.jsx</code></td><td>This lesson. Three functions: <code>ScatteredMushrooms</code>, <code>InstancedMushroomPart</code>, <code>MushroomHitTargets</code>.</td></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Builds <code>mushroomPlacements</code> and passes the three props.</td></tr>
+    <tr><td><code>src/lib/pickNearestMushroom.js</code></td><td>The screen-space search the hit plane calls.</td></tr>
+    <tr><td><code>public</code> model URL <code>/models/fly_agaric_mushroom.glb</code></td><td>The source of geometry and materials. It is never mounted as a scene.</td></tr>
+  </table>
+
+  <h2>1. Two jobs, three props</h2>
+  <pre><code>export default function ScatteredMushrooms({
+  expandableMushroomsIndices = [],
+  onSelect,
+  placements,
+})</code></pre>
+  <ul>
+    <li><code>placements</code> is the list from <code>scatterObjectsOnTerrain</code>. Each item is <code>{ x, y, elevation, rotationY, scale }</code>. This file only stamps the model onto that list.</li>
+    <li><code>expandableMushroomsIndices</code> is a list of copy indexes that should breathe. The default <code>[]</code> means every copy stays at rest size. The list does not enable or block clicks.</li>
+    <li><code>onSelect</code> is optional. When <code>Terrain</code> passes <code>setClickedMushroomIndex</code>, a successful pick calls <code>onSelect(index)</code>. With no <code>onSelect</code>, the mushrooms still draw and the hit plane is left out.</li>
+  </ul>
+  <p>If <code>placements.length === 0</code>, the component returns <code>null</code> before any mesh is created.</p>
+
+  <h2>2. Read the GLB into part records</h2>
+  <p><code>useGLTF(MUSHROOM_MODEL_URL)</code> loads <code>/models/fly_agaric_mushroom.glb</code> and returns a <code>scene</code>. That scene is a source of meshes. It is not placed in the canvas.</p>
+  <p>A <code>useMemo</code> walks it once:</p>
+  <pre><code>scene.updateMatrixWorld(true)
+scene.traverse((child) => {
+  if (!child.isMesh) return
+
+  meshes.push({
+    geometry: child.geometry,
+    material: child.material,
+    localMatrix: child.matrixWorld.clone(),
+  })
+})</code></pre>
+  <p><code>updateMatrixWorld(true)</code> runs first because this scene is never added to the canvas, so the renderer will not refresh it. <code>matrixWorld</code> is where that part sits inside the file: the cap above the stem, the stem above the origin. <code>localMatrix</code> is a clone of that matrix, so later edits to the loaded scene cannot move the copies. If you skip the update, <code>matrixWorld</code> can still be the identity and every part instances on top of the same point.</p>
+  <p><code>useGLTF.preload(MUSHROOM_MODEL_URL)</code> at the bottom of the file starts the download when the module is imported, before the component renders. It does not create meshes.</p>
+  <p>The code does not name the parts. However many meshes the file contains, that is <code>parts.length</code>.</p>
+
+  <h2>3. One <code>InstancedMesh</code> per part</h2>
+  <pre><code>{parts.map((part, index) => (
+  &lt;InstancedMushroomPart
+    key={index}
+    geometry={part.geometry}
+    material={part.material}
+    localMatrix={part.localMatrix}
+    placements={placements}
+    expandableMushroomsIndices={expandableMushroomsIndices}
+  /&gt;
+))}</code></pre>
+  <p><code>index</code> here is the part index, used only as the React <code>key</code>. Every part receives the same <code>placements</code> array. Inside each part, the instanced mesh is:</p>
+  <pre><code>&lt;instancedMesh
+  args={[geometry, material, placements.length]}
+  castShadow
+  receiveShadow
+  raycast={null}
+/&gt;</code></pre>
+  <p><code>placements.length</code> is how many copies to allocate. The geometry and material are the objects taken from the GLB. They are shared by every copy of that part. <code>castShadow</code> and <code>receiveShadow</code> let the copies take part in the scene shadows. <code>raycast={null}</code> means a click never hits the cap or the stem. Section 6 is what receives the pointer instead.</p>
+
+  <h2>4. One matrix per copy, every frame</h2>
+  <p>The instanced mesh starts with identity matrices, so every copy would sit at the origin. <code>useFrame</code> rewrites them before each draw. The firs can write once in <code>useLayoutEffect</code> because their scale never changes. These copies breathe, so the matrix has to be written again whenever time changes.</p>
+  <pre><code>placements.forEach((placement, index) => {
+  const breath = expandableSet.has(index)
+    ? 1 + BREATH_AMPLITUDE * (0.5 + 0.5 * Math.sin(time * BREATH_SPEED + index * 1.73))
+    : 1
+
+  dummy.position.set(placement.x, placement.elevation, -placement.y)
+  dummy.rotation.set(0, placement.rotationY, 0)
+  dummy.scale.setScalar(placement.scale * MUSHROOM_BASE_SCALE * breath)
+  dummy.updateMatrix()
+  composed.multiplyMatrices(dummy.matrix, localMatrix)
+  mesh.setMatrixAt(index, composed)
+})</code></pre>
+  <ul>
+    <li><strong><code>dummy</code></strong> is one scratch <code>Object3D</code>, created once with <code>useMemo</code>. The loop reuses it instead of allocating an object per mushroom per frame.</li>
+    <li><strong>Position</strong> is <code>(x, elevation, -y)</code>. The ground mesh is rotated <code>-90°</code> on X. These instances are siblings of that mesh, so they do not inherit the rotation. Height becomes world Y. The minus sign keeps the copies on the same side of the plane as the hills.</li>
+    <li><strong>Rotation</strong> is yaw only. X and Z stay <code>0</code>, so the mushroom stays upright.</li>
+    <li><strong>Scale</strong> is three factors multiplied. <code>placement.scale</code> is the variety from the scatter, roughly <code>0.8</code> to <code>1.2</code>. <code>MUSHROOM_BASE_SCALE</code> is <code>0.0025</code>, which brings the large source file down to a mushroom. <code>breath</code> is <code>1</code> for a resting copy, or a number from <code>1</code> to about <code>1.24</code> for a copy whose index is in <code>expandableMushroomsIndices</code>.</li>
+    <li><strong><code>updateMatrix()</code></strong> bakes position, rotation, and scale into <code>dummy.matrix</code>.</li>
+    <li><strong><code>composed</code></strong> is another reused <code>Matrix4</code>. <code>multiplyMatrices(dummy.matrix, localMatrix)</code> applies the part offset first, then moves the whole mushroom onto the hill. That is what keeps the cap on the stem of the same copy.</li>
+    <li><strong><code>setMatrixAt(index, composed)</code></strong> stores it. This <code>index</code> is the copy, not the part. Copy <code>3</code> on every part is the same mushroom.</li>
+  </ul>
+  <p>The breath formula, when the index is in the set:</p>
+  <ul>
+    <li><code>BREATH_SPEED</code> is <code>2.4</code> radians per second.</li>
+    <li><code>0.5 + 0.5 * sin(...)</code> maps the sine from <code>-1…1</code> into <code>0…1</code>, so the copy only grows above its rest size.</li>
+    <li><code>BREATH_AMPLITUDE</code> is <code>0.24</code>, so the extra scale tops out near <code>0.24</code>.</li>
+    <li><code>index * 1.73</code> shifts the phase. Neighboring copies do not inhale on the same frame.</li>
+  </ul>
+  <p><code>expandableSet</code> is a <code>Set</code> built from <code>expandableMushroomsIndices</code>, so each copy can ask <code>has(index)</code> without scanning the array. An index missing from the set gets breath <code>1</code>.</p>
+
+  <h2>5. Upload the matrices, then measure the bounds once</h2>
+  <pre><code>mesh.instanceMatrix.needsUpdate = true
+
+if (!boundsReadyRef.current) {
+  mesh.computeBoundingSphere()
+  boundsReadyRef.current = true
+}</code></pre>
+  <p><code>needsUpdate</code> tells Three.js to upload the matrix buffer to the GPU this frame. Without it, the copies stay at the origin even though <code>setMatrixAt</code> changed the JavaScript arrays.</p>
+  <p><code>computeBoundingSphere()</code> builds the sphere used for frustum culling. A fresh instanced mesh still describes one model at the origin. The sphere is computed on the first frame only. Later frames change scale by a small breath, and the copies do not walk to a new patch of ground, so that first sphere still encloses them. <code>boundsReadyRef</code> is a ref so the flag survives re-renders without causing another one.</p>
+
+  <h2>6. The hit plane and the picker</h2>
+  <p><code>MushroomHitTargets</code> renders only when <code>onSelect</code> was passed:</p>
+  <pre><code>&lt;mesh
+  rotation={[-Math.PI / 2, 0, 0]}
+  position={[0, 0.02, 0]}
+  onClick={...}
+  onPointerMove={...}
+  onPointerOut={...}
+&gt;
+  &lt;planeGeometry args={[TERRAIN_SIZE, TERRAIN_SIZE]} /&gt;
+  &lt;meshBasicMaterial transparent opacity={0} depthWrite={false} /&gt;
+&lt;/mesh&gt;</code></pre>
+  <p>The plane matches the terrain size, lies flat, and sits <code>0.02</code> above the ground. Opacity <code>0</code> keeps it invisible. <code>depthWrite: false</code> keeps that invisible surface from hiding the soil. This mesh is the event target. It knows that the pointer hit the ground. It does not know which mushroom that was.</p>
+  <p><code>selectAtPointer</code> calls <code>event.stopPropagation()</code> so the click does not also drag the orbit controls, then calls <code>pickNearestMushroomIndex</code> with the placements, <code>event.pointer</code>, the camera, the canvas size, and <code>MUSHROOM_PICK_MAX_DISTANCE_PX</code> (<code>40</code>).</p>
+  <p>Inside <code>pickNearestMushroom.js</code> the search is in pixels:</p>
+  <ol>
+    <li>Convert the pointer from normalized device coordinates to pixels. Screen Y grows downward, so the pointer's Y is flipped.</li>
+    <li>For each placement, project the world point <code>(x, elevation + 0.18, -y)</code>. The extra <code>0.18</code> lifts the test into the cap.</li>
+    <li>Skip a mushroom whose projected <code>z</code> is outside <code>-1…1</code>. It is outside the camera volume.</li>
+    <li>Keep the index with the smallest squared pixel distance, and only if that distance is within <code>40²</code>.</li>
+  </ol>
+  <p>The function returns <code>null</code> when nothing is close enough. On click, a real index is passed to <code>onSelect</code>. On move, a hit sets <code>document.body.style.cursor</code> to <code>pointer</code>; <code>onPointerOut</code> sets it back to <code>auto</code>.</p>
+  <p>The picker does not read <code>expandableMushroomsIndices</code>. A resting mushroom can still be selected. What happens to that index after <code>onSelect</code> is <code>Terrain</code>'s state and <code>MyceliumNetwork</code>'s graph. This file's job ends at the call.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>Preload the GLB URL. Load it with <code>useGLTF</code> and keep the returned <code>scene</code> off the canvas.</li>
+    <li>Force <code>updateMatrixWorld(true)</code>, then collect <code>{ geometry, material, localMatrix }</code> for every mesh.</li>
+    <li>Render one <code>instancedMesh</code> per part, with <code>args={[geometry, material, placements.length]}</code>, shadows on, and <code>raycast={null}</code>.</li>
+    <li>In <code>useFrame</code>, write <code>(x, elevation, -y)</code>, yaw, and <code>placement.scale * 0.0025 * breath</code>. Multiply by <code>localMatrix</code> and <code>setMatrixAt</code>.</li>
+    <li>Set <code>instanceMatrix.needsUpdate</code> every frame. Compute the bounding sphere once.</li>
+    <li>When <code>onSelect</code> exists, catch the pointer on an invisible ground plane and resolve the copy with <code>pickNearestMushroomIndex</code>.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Log <code>parts.length</code> after the <code>useMemo</code>. That number is how many <code>InstancedMushroomPart</code> elements mount, and how many draw calls the mushrooms cost.</li>
+    <li>Set <code>MUSHROOM_BASE_SCALE</code> to <code>1</code> for one reload. The copies should dwarf the terrain. Restore <code>0.0025</code>.</li>
+    <li>Remove the minus on <code>placement.y</code> in <code>dummy.position.set</code>. The copies should mirror across X relative to the hills. Put the minus back. The picker uses the same minus; change only the instance line so you can see the models leave the pick points.</li>
+    <li>Replace <code>mesh.setMatrixAt(index, composed)</code> with <code>mesh.setMatrixAt(index, dummy.matrix)</code> for one reload. The parts of one mushroom should stack on the same origin. Restore <code>composed</code>.</li>
+    <li>Temporarily pass <code>expandableMushroomsIndices={[]}</code> from <code>Terrain</code>. Every copy should stay still. A click should still call <code>onSelect</code>. Restore the prop.</li>
+    <li>Comment out <code>&lt;MushroomHitTargets /&gt;</code>. The mushrooms should stay visible, and clicks should stop changing <code>clickedMushroomIndex</code>. Put the element back.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Which of the three props does this file write, and which does it only read?</li>
+    <li>Why is the loaded <code>scene</code> traversed instead of mounted?</li>
+    <li>Which index in <code>setMatrixAt</code> is the copy, and which index in <code>parts.map</code> is the part?</li>
+    <li>What does each factor in <code>placement.scale * MUSHROOM_BASE_SCALE * breath</code> control?</li>
+    <li>Why can a mushroom breathe and still be missed by a click 50 pixels away?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. <code>placements</code> arrives from:</legend>
+      <label><input type="radio" name="q1" value="a"> <span><code>useGLTF</code>, one record per mesh in the file</span></label>
+      <label><input type="radio" name="q1" value="b"> <span><code>pickNearestMushroomIndex</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span><code>Terrain</code>, already scattered onto the hills</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>The instanced mesh, after <code>setMatrixAt</code></span></label>
+      <p class="explain">This file consumes the list. Scatter, mask, and elevation happen before the prop is passed.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>2. <code>parts.map</code> returns:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>One <code>instancedMesh</code> for the whole GLB</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>One <code>InstancedMushroomPart</code> per mesh found in the scene</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>One React element per placement</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>The invisible hit plane only</span></label>
+      <p class="explain">Each mesh keeps its own geometry, material, and <code>localMatrix</code>. Every part then draws every placement.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. Copy index <code>3</code> on two different parts is:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>The same mushroom. Only <code>localMatrix</code> differs</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Two different mushrooms</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>The React <code>key</code> of the part</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Always the mushroom at the origin</span></label>
+      <p class="explain">Both parts walk the same <code>placements</code> array. The <code>key</code> on <code>InstancedMushroomPart</code> is which part, not which mushroom.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. <code>MUSHROOM_BASE_SCALE</code> is <code>0.0025</code> because:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>That is the terrain elevation</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Breath has to stay under 1</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>The pick radius is 40 pixels</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>placement.scale</code> is only size variety, and the source file is much larger than a mushroom</span></label>
+      <p class="explain">Without the base scale, each copy is enormous. Breath and the scatter scale are extra multipliers on top of it.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. <code>expandableMushroomsIndices</code> changes:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Which copies <code>onClick</code> is allowed to select</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Which copies get a breath other than <code>1</code></span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Which meshes are loaded from the GLB</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>The pixel radius in <code>pickNearestMushroomIndex</code></span></label>
+      <p class="explain">The set is read in the scale line. The picker still searches every placement within 40 pixels.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can list the three props and the three functions in the file</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say what <code>localMatrix</code> adds after <code>dummy.matrix</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You changed the base scale, saw the giants, and restored <code>0.0025</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can separate breath from picking</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can walk a click from the plane through <code>pickNearestMushroomIndex</code> to <code>onSelect</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

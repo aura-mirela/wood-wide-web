@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mask-based scattering on terrain</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="instancing-scattered-models.html">Next: instancing →</a>
+</nav>
+<main>
+  <p class="meta">Procedural track · density masks, seeded RNG, InstancedMesh, terrain alignment</p>
+  <h1>Mask-based scattering on terrain</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> how this project plants firs and fly agarics. You do not place each model by hand. You throw many candidate points at the ground, keep only those the mask allows, sit them on the FBM hills, and draw the survivors as instances.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>define a mask and say what it is used for;</li>
+    <li>define texture-based procedural scattering in one paragraph;</li>
+    <li>sketch this project's component tree and name the props each parent sends down;</li>
+    <li>explain rejection sampling with a density mask;</li>
+    <li>map a world position on the terrain to a UV and read a mask pixel;</li>
+    <li>seed a random number generator so a forest can change on reload or stay fixed for debugging;</li>
+    <li>place objects on a displaced plane after the <code>-Math.PI / 2</code> X rotation;</li>
+    <li>instance a multi-mesh GLB instead of mounting one React tree per object.</li>
+  </ul>
+
+  <h2>What is a mask, and what is it used for?</h2>
+  <p>A <strong>mask</strong> is a 2D image that does not shade the scene. It answers <em>where</em> and <em>how much</em>. Each pixel is a weight, usually from black (0) to white (1). Gray is a value in between.</p>
+  <p>Think of a stencil or a cookie cutter laid over the terrain. The picture is not the fir or the mushroom. It is a permission map: “this patch is allowed / this patch is forbidden / this patch is only half-allowed.”</p>
+  <p>Graphics uses masks for many jobs:</p>
+  <ul>
+    <li><strong>Visibility / cutout</strong> — hide parts of a mesh (leaves, a hole in a fence).</li>
+    <li><strong>Selection</strong> — limit a paint stroke, a blur, or a color grade to a region.</li>
+    <li><strong>Blend</strong> — mix two materials (dirt vs moss) by a painted weight.</li>
+    <li><strong>Density / scatter</strong> — this lesson. The mask is a <em>probability field</em>. White means “a candidate here almost always lives.” Black means “always skip.” Gray means “maybe.”</li>
+  </ul>
+  <p>In this project the mask is <strong>not</strong> stamped onto the ground as a texture you see. The soil still uses the pine-root PBR maps. The scatter maps stay off-screen. Code reads them: world point → UV → one pixel → a 0–1 density → keep or reject that candidate.</p>
+  <p>Two masks run at once because trees and mushrooms should not share the same living area:</p>
+  <ul>
+    <li><code>scatter-maps/firs-scatter-map.png</code> — white X. Firs cluster on the X.</li>
+    <li><code>scatter-maps/mushrooms-scatter-map.png</code> — seven soft dots. Fly agarics cluster on the dots.</li>
+  </ul>
+  <p><code>Terrain</code> owns those two PNGs. It loads them with <code>useTexture</code> and never applies them to the ground material. A 1×1 white image is a mask too: density is 1 everywhere, so every candidate survives. That is how you test placement before you paint art.</p>
+
+  <h2>What is texture-based procedural scattering?</h2>
+  <p><strong>Texture-based procedural scattering</strong> is a way to populate a surface with many objects without placing them by hand and without baking their positions into the scene. A program proposes candidate points. A <em>texture</em> — a painted black-and-white (or grayscale) map — decides how likely each point is to live. The code then writes a transform (position, yaw, scale) for every survivor and draws those copies cheaply.</p>
+  <p>Three ideas sit in that name:</p>
+  <ul>
+    <li><strong>Procedural</strong> — positions come from an algorithm (random candidates + rules), not from dragging 80 firs in a DCC app.</li>
+    <li><strong>Texture-based</strong> — art direction is a 2D image aligned to the terrain UVs. White means “this patch wants life,” black means “keep this clear,” gray means “maybe.” You change the forest by painting, not by rewriting loops.</li>
+    <li><strong>Scattering</strong> — many similar objects (trees, mushrooms) are distributed across a surface. The mask is not a stencil that stamps models onto pixels; it is a <em>probability field</em> the scatter loop samples.</li>
+  </ul>
+  <p>That is different from:</p>
+  <ul>
+    <li>hand-placed props (one transform per object, authored once);</li>
+    <li>noise-only scatter (no painted shape — only math, so you cannot draw an X or seven rings);</li>
+    <li>a particle system (good for thousands of dots of light, not for a GLB with materials).</li>
+  </ul>
+  <p>In this project the texture is the density mask. The procedure is: random point on the plane → UV → read the mask → keep or reject → sit on the FBM height → instance the GLB. Two masks run in parallel: an X for firs, seven soft dots for mushrooms.</p>
+
+  <h2>Component and file structure</h2>
+  <p>Read this as a family tree. A parent <em>renders</em> children. When a parent computes data the child needs, it <em>transmits props</em>.</p>
+
+  <h3>In sentences</h3>
+  <p><strong><code>App</code></strong> is the root parent. It renders <code>Experience</code>. Role: mount the page. It does not know about trees or masks.</p>
+  <p><strong><code>Experience</code></strong> is the main 3D parent. It renders the R3F <code>Canvas</code> (orbit controls, lights, <code>Suspense</code>) and <code>Terrain</code>. Role: own the camera, lighting, and loading fallback. It does not scatter anything itself. It transmits no props to <code>Terrain</code> right now.</p>
+  <p><strong><code>Terrain</code></strong> is the scatter parent. It renders three children: the ground <code>mesh</code>, <code>ScatteredFirTrees</code>, and <code>ScatteredMushrooms</code>. Role: build and cache the displaced plane; load the two mask textures; pick seeds; call <code>scatterObjectsOnTerrain</code> twice; pass each placement list down. It can receive <code>tiling</code>, <code>treeCount</code>, and <code>mushroomCount</code>. The scatter masks stay inside <code>Terrain</code>.</p>
+  <p>The ground <strong><code>mesh</code></strong> is the parent of <code>TerrainPBRMaterial</code>. Role: show the soil and hold the <code>-90°</code> X rotation. It transmits to the child the following props: <code>tiling</code>.</p>
+  <p><strong><code>ScatteredFirTrees</code></strong> is a child of <code>Terrain</code> and the parent of <code>InstancedTreePart</code>. Role: load <code>fir_tree.glb</code> once, split it into reusable parts, and instance those parts at every surviving tree placement. It receives from <code>Terrain</code> the following props: <code>placements</code>. It transmits to each <code>InstancedTreePart</code> the following props: <code>geometry</code>, <code>material</code>, <code>localMatrix</code>, <code>placements</code>.</p>
+  <p><strong><code>ScatteredMushrooms</code></strong> is a sibling of <code>ScatteredFirTrees</code> and the parent of <code>InstancedMushroomPart</code>. Role: the same instancing job as the firs, plus a <code>MUSHROOM_BASE_SCALE</code> so the Sketchfab model is mushroom-sized. It receives from <code>Terrain</code> the following props: <code>placements</code>. It transmits to each <code>InstancedMushroomPart</code> the following props: <code>geometry</code>, <code>material</code>, <code>localMatrix</code>, <code>placements</code>.</p>
+  <p><strong><code>InstancedTreePart</code></strong> and <strong><code>InstancedMushroomPart</code></strong> are the leaves. Role: write one <code>&lt;instancedMesh&gt;</code> buffer. They do not pick new points. They take the props above and, for each placement, set one instance matrix: world transform × the GLB part’s <code>matrixWorld</code>.</p>
+
+  <h3>As a tree</h3>
+
+  <ul class="tree-list">
+    <li>
+      <strong><code>App</code></strong> is the root of the React tree.
+      <span class="role">Role: mount the page. It does not know about trees or masks. It only renders <code>Experience</code>.</span>
+    </li>
+    <li>
+      <strong><code>Experience</code></strong> is the main 3D parent. It renders the R3F <code>Canvas</code>, orbit controls, lights, a <code>Suspense</code> boundary, and <code>Terrain</code>.
+      <span class="role">Role: own the camera, lighting, and loading fallback. It does not scatter anything itself.</span>
+      <span class="props">Props it transmits to <code>Terrain</code>: none right now (Terrain uses its own defaults). Later you could pass <code>tiling</code>, <code>treeCount</code>, or <code>mushroomCount</code>.</span>
+      <ul class="tree-list">
+        <li>
+          <strong><code>Terrain</code></strong> is the scatter parent. It renders three children: the ground <code>mesh</code>, <code>ScatteredFirTrees</code>, and <code>ScatteredMushrooms</code>.
+          <span class="role">Role: build and cache the displaced plane; load the two mask textures; pick seeds; call <code>scatterObjectsOnTerrain</code> twice; pass each placement list down.</span>
+          <span class="props">Props it can receive (from <code>Experience</code> or defaults): <code>tiling</code>, <code>treeCount</code>, <code>mushroomCount</code>. The two scatter masks are loaded inside <code>Terrain</code>, not passed in.</span>
+          <ul class="tree-list">
+            <li>
+              <strong>Ground <code>mesh</code></strong> is a child of <code>Terrain</code>. It renders <code>TerrainPBRMaterial</code>.
+              <span class="role">Role: show the soil. It holds the cached <code>PlaneGeometry</code> and the <code>-90°</code> X rotation that lays the plane flat.</span>
+              <span class="props">Props it transmits to <code>TerrainPBRMaterial</code>: <code>tiling</code>.</span>
+            </li>
+            <li>
+              <strong><code>ScatteredFirTrees</code></strong> is a child of <code>Terrain</code>. It renders one <code>InstancedTreePart</code> per mesh inside <code>fir_tree.glb</code> (trunk + foliage).
+              <span class="role">Role: load the fir GLB once, split it into reusable parts, and instance those parts at every surviving tree placement.</span>
+              <span class="props">Props it receives from <code>Terrain</code>: <code>placements</code> (array of <code>{ x, y, elevation, rotationY, scale }</code>).</span>
+              <ul class="tree-list">
+                <li>
+                  <strong><code>InstancedTreePart</code></strong> is a child of <code>ScatteredFirTrees</code>.
+                  <span class="role">Role: write one <code>&lt;instancedMesh&gt;</code> (trunk or foliage) and apply every placement matrix.</span>
+                  <span class="props">Props it receives: <code>geometry</code>, <code>material</code>, <code>localMatrix</code>, <code>placements</code>.</span>
+                </li>
+              </ul>
+            </li>
+            <li>
+              <strong><code>ScatteredMushrooms</code></strong> is a sibling of <code>ScatteredFirTrees</code>, also a child of <code>Terrain</code>. It renders one <code>InstancedMushroomPart</code> per mesh inside <code>fly_agaric_mushroom.glb</code> (cap, stem, annulus).
+              <span class="role">Role: same instancing job as the firs, plus a <code>MUSHROOM_BASE_SCALE</code> so the Sketchfab model is mushroom-sized.</span>
+              <span class="props">Props it receives from <code>Terrain</code>: <code>placements</code>.</span>
+              <ul class="tree-list">
+                <li>
+                  <strong><code>InstancedMushroomPart</code></strong> is a child of <code>ScatteredMushrooms</code>.
+                  <span class="role">Role: write one <code>&lt;instancedMesh&gt;</code> and apply every placement matrix, scaled by the mushroom base size.</span>
+                  <span class="props">Props it receives: <code>geometry</code>, <code>material</code>, <code>localMatrix</code>, <code>placements</code>.</span>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+
+  <p>Helpers are not React parents. <code>Terrain</code> calls them while computing props:</p>
+  <ul>
+    <li><code>createTerrainGeometry.js</code> — builds the hill mesh and exposes <code>getTerrainElevation</code>.</li>
+    <li><code>scatterObjectsOnTerrain.js</code> — turns <code>count</code> + <code>maskTexture</code> + <code>seed</code> into a <code>placements</code> array.</li>
+    <li><code>sampleMask.js</code> — reads one UV from a texture as a 0–1 density.</li>
+  </ul>
+
+  <h2>Where this lives in the project</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/lib/scatterObjectsOnTerrain.js</code></td><td>Propose points, test the mask, write placement data</td></tr>
+    <tr><td><code>src/lib/sampleMask.js</code></td><td>Read one pixel from a texture and return 0–1 density</td></tr>
+    <tr><td><code>src/lib/createTerrainGeometry.js</code></td><td><code>getTerrainElevation(x, y)</code> — same FBM the ground used</td></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Loads the two masks, picks seeds, asks for placements</td></tr>
+    <tr><td><code>src/3d-components/ScatteredFirTrees.jsx</code></td><td>Instances <code>fir_tree.glb</code></td></tr>
+    <tr><td><code>src/3d-components/ScatteredMushrooms.jsx</code></td><td>Instances <code>fly_agaric_mushroom.glb</code> with a tiny base scale</td></tr>
+    <tr><td><code>public/textures/scatter-maps/firs-scatter-map.png</code></td><td>Tree mask (white X)</td></tr>
+    <tr><td><code>public/textures/scatter-maps/mushrooms-scatter-map.png</code></td><td>Mushroom mask (seven soft dots)</td></tr>
+  </table>
+
+  <h2>1. Scatter is a filter, not a painter</h2>
+  <p>The algorithm does not “draw an X of trees.” It does this:</p>
+  <ol>
+    <li>Pick a random point on the terrain rectangle.</li>
+    <li>Convert that point to UV <code>(0–1, 0–1)</code>.</li>
+    <li>Read the mask. White ≈ 1, black ≈ 0, gray is a chance in between.</li>
+    <li>Roll another random number. Keep the point only if <code>random() ≤ keepPlacementCandidateChance</code>.</li>
+    <li>Repeat until you have <code>count</code> keepers, or you run out of attempts.</li>
+  </ol>
+  <p>That last detail matters. The function tries about <code>count * 6</code> candidates. A thin mask (a skinny X, or small dots) rejects most rolls. If you ask for 10,000 trees on a tiny white spec, you will get fewer than 10,000. The mask is the art direction; <code>count</code> is only a ceiling.</p>
+  <pre><code>if (random() &gt; keepPlacementCandidateChance) {
+  continue // rejected
+}</code></pre>
+  <p>A fully white 1×1 texture means density is always 1, so every candidate survives. That is why the first version of the forest used a generated white mask: get placement working before you paint a map.</p>
+
+  <h2>2. World point → UV → pixel</h2>
+  <p>The terrain is a square of width <code>TERRAIN_SIZE</code>, centered on the origin. Local plane coordinates run from <code>-size/2</code> to <code>+size/2</code>.</p>
+  <pre><code>u = (x + size / 2) / size
+v = (y + size / 2) / size</code></pre>
+  <p><code>sampleMask</code> then wraps those UVs and reads the <strong>red</strong> channel:</p>
+  <ul>
+    <li><code>DataTexture</code> (the old white 1×1) — read <code>image.data</code> directly.</li>
+    <li>A PNG loaded by <code>useTexture</code> — draw once into a canvas, then <code>getImageData</code>.</li>
+  </ul>
+  <p>Y is flipped with <code>(1 - v)</code> because image rows start at the top and terrain V starts at the bottom. If your mask looks mirrored, this line is the first suspect.</p>
+  <p>Soft gray edges on the mushroom map are intentional. Near the rim of a dot, density is 0.3–0.6, so the cluster feathers out instead of cutting like a cookie stamp.</p>
+
+  <h2>3. Seeds: random every load, repeatable when you need it</h2>
+  <p><code>Math.random()</code> is fine for a one-off roll. A scatter pass needs <em>a stream</em> of numbers: positions, keep/reject, yaw, scale. This project uses a tiny Lehmer generator:</p>
+  <pre><code>state = (state * 16807) % 2147483647</code></pre>
+  <p>Same seed → same forest. New seed → a different forest that still respects the mask.</p>
+  <p>In <code>Terrain.jsx</code> the seed is created once with <code>useState(() =&gt; ...)</code>. That is the React-safe way to pick a random value on mount without calling <code>Math.random()</code> on every render. Reload the page to reshuffle. While debugging a mask, temporarily hard-code <code>seed: 17</code> so the trees stop moving while you stare at them.</p>
+
+  <h2>4. Sit on the hills, not the flat plane</h2>
+  <p>The ground is a plane displaced in <strong>local Z</strong> by FBM, then the mesh is rotated <code>[-Math.PI / 2, 0, 0]</code>. After that rotation:</p>
+  <pre><code>local (x, y, elevation)
+    → world (x, elevation, -y)</code></pre>
+  <p>So a placement stores plane <code>x, y</code> plus <code>getTerrainElevation(x, y)</code> — the same function that built the geometry. The instance then does:</p>
+  <pre><code>dummy.position.set(placement.x, placement.elevation, -placement.y)
+dummy.rotation.set(0, placement.rotationY, 0)</code></pre>
+  <p>Yaw is around <strong>world Y</strong> because the trees are <em>siblings</em> of the rotated terrain mesh, not children of it. If you parent them under the same <code>-90°</code> group, yaw must rotate around local Z instead, or the trunks will lie down.</p>
+
+  <h2>5. Instance the GLB; do not mount 80 scenes</h2>
+  <p>Eighty firs as <code>&lt;primitive object={clone(scene)} /&gt;</code> means eighty scene graphs and a pile of draw calls. The fir has two meshes; the mushroom has three. The pattern is:</p>
+  <ol>
+    <li><code>useGLTF</code> once.</li>
+    <li>Traverse and collect <code>{ geometry, material, matrixWorld }</code> per mesh.</li>
+    <li> One <code>&lt;instancedMesh args={[geometry, material, count]} /&gt;</code> per part.</li>
+    <li> For each placement, build a dummy transform, then <code>dummy.matrix × mesh.matrixWorld</code> so Sketchfab’s internal offsets stay correct.</li>
+  </ol>
+  <pre><code>composed.multiplyMatrices(dummy.matrix, localMatrix)
+mesh.setMatrixAt(index, composed)</code></pre>
+  <p>The mushroom file is about 127 units tall in native space. <code>ScatteredMushrooms.jsx</code> multiplies the 0.8–1.2 variety scale by <code>MUSHROOM_BASE_SCALE = 0.0035</code>. Always measure a Sketchfab bbox before you scatter, or one “mushroom” will be a building.</p>
+
+  <h2>6. Variety after survival</h2>
+  <p>Only accepted points get style:</p>
+  <ul>
+    <li><code>rotationY = random() * Math.PI * 2</code></li>
+    <li><code>scale = 0.8 + random() * 0.4</code></li>
+  </ul>
+  <p>If you randomize before the mask test, rejected points waste RNG state. Functionally it still works; keeping style after survival makes the seed’s “Nth kept tree” easier to reason about.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>Export a height function that matches the terrain vertex displacement.</li>
+    <li>Write <code>sampleMask(texture, u, v)</code> and prove it with a 1×1 white texture (everything lives) and a 1×1 black texture (everything dies).</li>
+    <li>Write the candidate loop: random plane point → UV → keep/reject → elevation, yaw, scale.</li>
+    <li>Place instances with the <code>(x, elevation, -y)</code> remap.</li>
+    <li>Swap in a painted mask. Look from above. The white shape should be the living area.</li>
+    <li>Instance the GLB parts. If the model floats or sinks, inspect <code>bboxMin.y</code> and the root <code>matrixWorld</code>.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Temporarily seed both forests with <code>1</code>. Reload three times. They must not move. Then restore random seeds.</li>
+    <li>Invert the keep test (<code>random() &lt; keepPlacementCandidateChance</code> vs <code>&gt;</code> is easy to flip). Predict whether trees fill the X or the holes, then try it.</li>
+    <li>Paint a new mask with a clearing in the middle. Confirm the UV flip: if the clearing appears on the wrong side, fix <code>1 - v</code> or the plane axes, not the art first.</li>
+    <li>Parent the instances under the rotated terrain group. Watch them fall over. Fix the yaw axis and write one sentence about why.</li>
+    <li>Count draw calls with <code>gl.info.render.calls</code> for 10 mushrooms vs 160. Instancing should stay almost flat.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What is a mask, and how is a density mask different from a texture you see on the ground?</li>
+    <li>What three ideas sit in the name “texture-based procedural scattering”?</li>
+    <li>Which component is the scatter parent, and which three children does it render?</li>
+    <li>What props does <code>ScatteredFirTrees</code> transmit to <code>InstancedTreePart</code>?</li>
+    <li>Why can <code>count</code> be larger than the number of objects you actually see?</li>
+    <li>Why must elevation use the same FBM parameters as the mesh?</li>
+    <li>Why are trees not children of the rotated terrain mesh in this project?</li>
+    <li>What does <code>matrixWorld</code> on a GLB mesh buy you when instancing?</li>
+    <li>When would you <em>not</em> re-roll the seed on every mount?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. Texture-based procedural scattering means:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>You stamp one GLB onto every white pixel of a texture</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>An algorithm proposes points; a painted texture is the probability that each point lives</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Only simplex noise can decide where objects go</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>You must author one transform per object in a DCC app</span></label>
+      <p class="explain">The texture is a probability field, not a stamp. The procedure (candidates + keep/reject + instance) does the placement.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. <code>ScatteredFirTrees</code> is the parent of <code>InstancedTreePart</code>. It transmits:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Only <code>tiling</code></span></label>
+      <label><input type="radio" name="q2" value="b"> <span><code>seed</code> and <code>maskTexture</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span><code>geometry</code>, <code>material</code>, <code>localMatrix</code>, <code>placements</code></span></label>
+      <label><input type="radio" name="q2" value="d"> <span><code>treeCount</code> and <code>mushroomCount</code></span></label>
+      <p class="explain"><code>Terrain</code> already ran the scatter. The fir component only splits the GLB and forwards each part plus the shared placement list.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>3. A density mask of 0.25 at a UV means:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Exactly one quarter of the models are scaled to 0.25</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>That pixel always spawns four objects</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>A candidate there has a 25% chance to survive</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>The object is moved 25% toward the origin</span></label>
+      <p class="explain">The mask is a probability, not a counter. Gray feathers clusters.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>4. After rotating the plane by <code>-90°</code> on X, a local point <code>(x, y, elevation)</code> becomes:</legend>
+      <label><input type="radio" name="q4" value="a"> <span><code>(x, y, elevation)</code></span></label>
+      <label><input type="radio" name="q4" value="b"> <span><code>(x, elevation, -y)</code></span></label>
+      <label><input type="radio" name="q4" value="c"> <span><code>(elevation, x, y)</code></span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>(-x, elevation, y)</code></span></label>
+      <p class="explain">X stays, local Z (height) becomes world Y, local Y becomes world −Z.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>5. Why instance each GLB mesh instead of cloning the whole scene 80 times?</legend>
+      <label><input type="radio" name="q5" value="a"> <span>One draw call per mesh part, shared geometry and material</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Instancing is required for GLB files to load</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Clones cannot have different rotations</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>useGLTF can only be called once per app</span></label>
+      <p class="explain">Instancing is a draw-call optimization. The file would still load if you cloned.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>6. The mushroom model is ~127 units tall. Random scale 0.8–1.2 alone would:</legend>
+      <label><input type="radio" name="q6" value="a"> <span>Hide the mushrooms underground</span></label>
+      <label><input type="radio" name="q6" value="b"> <span>Make them the same size as the firs</span></label>
+      <label><input type="radio" name="q6" value="c"> <span>Normalize the bbox automatically</span></label>
+      <label><input type="radio" name="q6" value="d"> <span>Create building-sized mushrooms unless you also apply a base scale</span></label>
+      <p class="explain">0.8–1.2 is relative variety. Sketchfab assets often need a separate unit conversion.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>7. Same seed, same mask, same count. The forest:</legend>
+      <label><input type="radio" name="q7" value="a"> <span>Must look different because GPUs are nondeterministic</span></label>
+      <label><input type="radio" name="q7" value="b"> <span>Is identical — the RNG stream and keep tests replay exactly</span></label>
+      <label><input type="radio" name="q7" value="c"> <span>Keeps positions but rerolls rotations</span></label>
+      <label><input type="radio" name="q7" value="d"> <span>Only matches if <code>Math.random</code> is used</span></label>
+      <p class="explain">A seeded integer RNG is deterministic. That is the whole point of passing <code>seed</code>.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-0"> <span>You can say what a mask is and name at least two things it is used for</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can define texture-based procedural scattering in one paragraph</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can sketch the parent tree and name the props each parent transmits</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can walk through one candidate: plane point → UV → mask → keep/reject → world position</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can explain why a white X mask does not “draw an X” but still produces one</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You know when to freeze a seed and when to roll a new one on mount</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You can write the local-to-world remap for this terrain’s rotation from memory</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-7"> <span>You scored at least 6/7 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

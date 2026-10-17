@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 07 — The cycle &amp; the whole story</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <a href="06-zoom-into-a-spore.html">← Lesson 06</a>
+  <span class="spacer"></span>
+</nav>
+<main>
+  <p class="meta">Tracks: growth animation, orchestration (state machine), final UX, performance</p>
+  <h1>Lesson 07 — The cycle &amp; the whole story</h1>
+  <p class="episode"><strong>Episodes 8–9: The cycle continues &amp; reflection.</strong> A spore grows: mycelium → primordium → mushroom. Then the camera pulls back and the forest breathes as one. Finally: stitch all episodes into one continuous experience.</p>
+
+  <h2>Concepts</h2>
+  <ul>
+    <li><strong>Growth = one scalar.</strong> Every growth you need is already a technique you own:
+      <ul>
+        <li>spore → mycelium: <code>aDistance &lt; uGrowth</code> reveal (lesson 04 exercise)</li>
+        <li>primordium → mushroom: <strong>lerp between two lathe profiles</strong> (same point count!) — profile A: a squat pin; profile B: the full Fly Agaric. Lerp in JS and rebuild, or better: pass both profiles' positions as attributes (<code>aPosA</code>, <code>aPosB</code>) and <code>mix(aPosA, aPosB, uGrowth)</code> in the vertex shader. Add a slight overshoot ease for the cap <em>popping</em> open.</li>
+        <li>growth should feel biological: not linear — slow start, surge, settle (an S-curve / <code>smoothstep</code> of <code>smoothstep</code>).</li>
+      </ul>
+    </li>
+    <li><strong>The episode state machine.</strong> The experience is a sequence: <code>forest → mushroom → spores → ground → network → exchange → micro → cycle → reflection</code>. Centralize it (React context or zustand):
+      <ul>
+        <li>current episode + a 0–1 progress within it</li>
+        <li>which inputs are live (click? scroll? drag?) per episode</li>
+        <li>camera mode and targets per episode</li>
+        <li>uniforms each episode drives (<code>uDim</code>, bloom strength, fog density)</li>
+      </ul>
+      Components <em>read</em> this state; nothing reaches across components to poke a sibling. This is the difference between a demo and a piece.</li>
+    <li><strong>Transitions are content.</strong> Define one transition grammar and reuse it: camera eases on curves (lesson 03), light states lerp (lesson 02), panels share one entrance/exit (lesson 02/05). The user should feel one hand guiding everything.</li>
+    <li><strong>Reflection scene:</strong> wide shot, everything subtly alive at once — fireflies, faint network pulses under the soil, a new small mushroom where the spore landed. No UI except one line of text. Restraint is the skill being practiced.</li>
+    <li><strong>Performance pass, in order:</strong> measure (r3f-perf or <code>gl.info</code>), then: merged geometries? instanced everything repeatable? <code>Points</code> for lights? textures sized sanely? postprocessing half-float? only then micro-optimize shaders. <code>react-responsive</code> / <code>useMediaQuery</code> to drop counts on mobile + <code>dpr</code> clamp on the Canvas.</li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Extract the state machine first — refactor existing episodes to read from it. Painful, instructive, worth it. Keyboard arrows = prev/next episode for debugging; a tiny episode indicator dev-overlay.</li>
+    <li>The cycle scene: hero spore from lesson 06 lands on soil → mycelium spreads (your network growth, smaller scale, <code>uGrowth</code> driven) → primordium rises (profile lerp) → cap opens → a few spores release (lesson 03 system, reused). Entire sequence scrubbed by one 0–1 value. Scroll drives it.</li>
+    <li>Reflection: pull-back camera curve to the widest shot; trigger the ambient systems; fade in the closing line ("The forest is more than what you see").</li>
+    <li>Title &amp; onboarding: opening text from episode 1, a hint system that shows input affordances ("drag to follow") only when the user stalls for ~5s.</li>
+    <li>Full runthrough QA: play start-to-finish 10 times. Fix every camera jump, every panel overlap, every pop. Keep a <code>BUGS.md</code>; fixing polish bugs teaches more than building features.</li>
+    <li>Performance pass as above. Target: 60fps desktop, stable 30+ on a mid phone.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Record a screen capture of the full experience and watch it muted. Where does your eye get lost? That's where a light or motion cue is missing.</li>
+    <li>Swap the profile-lerp growth for a vertex-shader version if you did it in JS (or vice versa) and compare cost + code clarity.</li>
+    <li>Write a one-paragraph "how it works" for each episode <em>from memory</em>. Anything you can't explain, revisit.</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why must both lathe profiles have the same point count to lerp? What breaks otherwise?</li>
+    <li>What belongs in the central state vs. local component state? Give one example of each from your own code.</li>
+    <li>Name the three cheapest big wins you found in your performance pass.</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. Lerping between two lathe profiles requires the same point count because:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>three.js throws otherwise</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Vertices pair by index — mismatched counts mean vertices have no partner to blend toward</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>The GPU requires power-of-two sizes</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>UVs would flip</span></label>
+      <p class="explain">Morphing is per-index interpolation; same count <em>and</em> same ordering along the profile.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>2. Doing the pin→mushroom morph with <code>mix(aPosA, aPosB, uGrowth)</code> in the vertex shader (vs rebuilding geometry in JS) buys you:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Better lighting</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Zero per-frame CPU/upload cost — one uniform drives the morph</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Smaller bundle size</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Automatic normals</span></label>
+      <p class="explain">Geometry uploads every frame are the hidden cost of the JS version; the shader version animates for free.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>3. Which belongs in the central episode state, not local component state?</legend>
+      <label><input type="radio" name="q3" value="a"> <span>The hover flag of one mushroom</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Which inputs (scroll/click/drag) are currently live</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>A panel's CSS animation progress</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>A firefly's blink phase</span></label>
+      <p class="explain">Input routing is story-level orchestration; a, c, d are private to their components.</p>
+    </fieldset>
+    <fieldset data-answer="c">
+      <legend>4. Growth that feels biological follows:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>Linear time</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Ease-out only</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>An S-curve — slow start, surge, settle</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>Constant acceleration</span></label>
+      <p class="explain">Smoothstep-of-smoothstep or similar; linear growth reads as mechanical.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>5. First step of a performance pass:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Rewrite shaders with fewer instructions</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Measure — draw calls, frame time, where the time actually goes</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Halve all texture sizes</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Remove postprocessing</span></label>
+      <p class="explain">Optimizing unmeasured code is guessing; the biggest win is usually draw calls, but prove it first.</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Full spore → mushroom cycle scrubbed by a single value</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>All episodes flow through one state machine with consistent transitions</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>Reflection scene lands emotionally with almost no UI</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>60fps desktop; graceful mobile degradation via <code>react-responsive</code> + dpr</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>Every lesson's box on the index page is ticked — then you're done, and ready to migrate shaders to TSL as the next learning arc</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

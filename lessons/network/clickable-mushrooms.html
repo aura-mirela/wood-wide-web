@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mushrooms you can click</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="scattered-mushrooms.html">← ScatteredMushrooms</a>
+  <span class="spacer"></span>
+  <a href="growing-mycelium.html">Next: the mycelium web →</a>
+</nav>
+<main>
+  <p class="meta">Network track · lifted state, screen-space picking, a breathing instance</p>
+  <h1>Mushrooms you can click</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> how a click on the forest becomes a mushroom index, and how mushrooms that can still grow the web breathe. The GLB split and the first matrix write live in <a href="../procedural/instancing-scattered-models.html">Instancing scattered firs and mushrooms</a>. This lesson starts after that.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>name which component owns <code>clickedMushroomIndex</code> and <code>expandableMushroomsIndices</code>, and which components only receive them;</li>
+    <li>walk one click from the invisible plane to <code>setClickedMushroomIndex</code>;</li>
+    <li>explain screen-space picking: project a world point, measure pixels, keep the nearest inside a radius;</li>
+    <li>say why the instanced mushrooms do not raycast;</li>
+    <li>read the breath formula and say what <code>index * 1.73</code> is for.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Owns <code>clickedMushroomIndex</code> and <code>expandableMushroomsIndices</code>. Passes placements and those two values down.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredMushrooms.jsx</code></td><td>Draws the instances, breathes the expandable ones, and picks a mushroom from a pointer event.</td></tr>
+    <tr><td><code>src/lib/pickNearestMushroom.js</code></td><td>Turns the pointer and the placement list into an index, or <code>null</code>.</td></tr>
+  </table>
+
+  <h2>1. Terrain holds the conversation</h2>
+  <p><code>Terrain</code> is the parent of both the mushrooms and the mycelium. It keeps two pieces of interaction state:</p>
+  <pre><code>const [clickedMushroomIndex, setClickedMushroomIndex] = useState(null)
+const [expandableMushroomsIndices, setExpandableMushroomsIndices] = useState([])</code></pre>
+  <ul>
+    <li><code>clickedMushroomIndex</code> is the mushroom that was just clicked. <code>null</code> means nothing has been chosen yet.</li>
+    <li><code>expandableMushroomsIndices</code> is the list of mushrooms that can still extend the web. The network computes it. The mushrooms only display it.</li>
+  </ul>
+  <p>The props make a loop through the parent:</p>
+  <pre><code>&lt;ScatteredMushrooms
+  placements={mushroomPlacements}
+  expandableMushroomsIndices={expandableMushroomsIndices}
+  onSelect={setClickedMushroomIndex}
+/&gt;
+&lt;MyceliumNetwork
+  placements={mushroomPlacements}
+  clickedMushroomIndex={clickedMushroomIndex}
+  onExpandableChange={setExpandableMushroomsIndices}
+/&gt;</code></pre>
+  <p>A click calls <code>onSelect(index)</code>, which is <code>setClickedMushroomIndex</code>. The network sees the new index, grows edges, then calls <code>onExpandableChange</code> with the mushrooms that are still worth clicking. Those indices come back down as <code>expandableMushroomsIndices</code>. Neither child stores the other's result.</p>
+
+  <h2>2. The same world position, every frame</h2>
+  <p>A placement is still <code>{ x, y, elevation, rotationY, scale }</code>. The ground mesh is rotated <code>-90°</code> on X, and the mushrooms are siblings of that mesh, so they do not inherit the rotation. World position is:</p>
+  <pre><code>dummy.position.set(placement.x, placement.elevation, -placement.y)</code></pre>
+  <p>The firs write that matrix once, in <code>useLayoutEffect</code>. The mushrooms write it inside <code>useFrame</code>, because the scale changes every frame. <code>instanceMatrix.needsUpdate = true</code> uploads the new matrices. <code>computeBoundingSphere()</code> runs only on the first frame (<code>boundsReadyRef</code>). The copies move by scale, not by leaving the patch of ground, so the sphere from the first frame still encloses them.</p>
+  <p><code>MUSHROOM_BASE_SCALE</code> is <code>0.0025</code>. <code>placement.scale</code> is only the size variety from the scatter. The base scale is what brings the Sketchfab file down to a mushroom.</p>
+
+  <h2>3. Breathing is the affordance</h2>
+  <p>Before the loop, the expandable indices become a <code>Set</code> so each copy can ask "am I in the list?" without scanning the array.</p>
+  <pre><code>const breath = expandableSet.has(index)
+  ? 1 + BREATH_AMPLITUDE * (0.5 + 0.5 * Math.sin(time * BREATH_SPEED + index * 1.73))
+  : 1
+
+dummy.scale.setScalar(placement.scale * MUSHROOM_BASE_SCALE * breath)</code></pre>
+  <ul>
+    <li><code>BREATH_AMPLITUDE</code> is <code>0.24</code>. The scale swings from <code>1</code> to about <code>1.24</code>.</li>
+    <li><code>0.5 + 0.5 * sin(...)</code> maps the sine from <code>-1…1</code> into <code>0…1</code>, so the mushroom only grows above its rest size.</li>
+    <li><code>BREATH_SPEED</code> is <code>2.4</code> radians per second.</li>
+    <li><code>index * 1.73</code> is a phase shift. Neighboring mushrooms do not inhale on the same frame. <code>1.73</code> is just a number that is not a tidy fraction of the circle.</li>
+  </ul>
+  <p>A mushroom that is not expandable stays at breath <code>1</code>. Stillness means "this one has already been used, or it has nobody left to connect to."</p>
+
+  <h2>4. The meshes do not take the click</h2>
+  <p>Each <code>&lt;instancedMesh&gt;</code> sets <code>raycast={null}</code>. Three.js will not test the cap, the stem, or the annulus. An invisible plane does:</p>
+  <pre><code>&lt;mesh
+  rotation={[-Math.PI / 2, 0, 0]}
+  position={[0, 0.02, 0]}
+  onClick={...}
+  onPointerMove={...}
+&gt;
+  &lt;planeGeometry args={[TERRAIN_SIZE, TERRAIN_SIZE]} /&gt;
+  &lt;meshBasicMaterial transparent opacity={0} depthWrite={false} /&gt;
+&lt;/mesh&gt;</code></pre>
+  <p>The plane is the size of the terrain, turned flat, and lifted <code>0.02</code> so it sits just above the ground. Opacity <code>0</code> keeps it invisible. <code>depthWrite: false</code> keeps that invisible surface from hiding the soil. <code>stopPropagation()</code> on the event keeps the click from also moving the orbit controls.</p>
+  <p>The plane only answers "the pointer hit the ground here." It does not know which mushroom that was. <code>selectAtPointer</code> does.</p>
+
+  <h2>5. Pick the nearest mushroom in pixels</h2>
+  <p><code>pickNearestMushroomIndex</code> receives the placement list, <code>event.pointer</code> (normalized device coordinates, about <code>-1…1</code>), the camera, the canvas size in pixels, and <code>MUSHROOM_PICK_MAX_DISTANCE_PX</code> (<code>40</code>).</p>
+  <ol>
+    <li>Turn the pointer into pixels. NDC <code>x</code> maps to <code>0…width</code>. NDC <code>y</code> is flipped, because screen Y grows downward.</li>
+    <li>For each placement, build the same world point the instance uses, plus <code>0.18</code> on Y so the test sits in the cap rather than in the soil: <code>(x, elevation + 0.18, -y)</code>.</li>
+    <li><code>mushroomPoint.project(camera)</code> puts that point into clip space. If <code>z</code> is outside <code>-1…1</code>, the mushroom is behind the camera or beyond the far plane. Skip it.</li>
+    <li>Convert the projected <code>x</code> and <code>y</code> to pixels with the same mapping as the pointer.</li>
+    <li>Keep the index with the smallest squared pixel distance, but only if that distance is inside <code>40²</code>. Squared distance avoids a square root. The comparison is the same.</li>
+  </ol>
+  <p>If nothing is close enough, the function returns <code>null</code> and the click does nothing. On move, a hit sets <code>document.body.style.cursor</code> to <code>pointer</code>; leaving the plane sets it back to <code>auto</code>.</p>
+  <p>This is a screen-space test, not a ray against each triangle. A mushroom far away occupies fewer pixels, so the same 40-pixel radius is stricter in the world. That is what you want for a click: "is the cursor near this mushroom on the screen?"</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>Keep <code>clickedMushroomIndex</code> and <code>expandableMushroomsIndices</code> on <code>Terrain</code>. Pass setters down as <code>onSelect</code> and <code>onExpandableChange</code>.</li>
+    <li>Draw mushrooms as instanced parts. Update matrices in <code>useFrame</code> when scale must change over time.</li>
+    <li>Scale expandable copies with a sine that never goes below <code>1</code>, and offset the phase by the copy index.</li>
+    <li>Turn raycasting off on the instances. Catch the pointer with a flat, invisible plane the size of the terrain.</li>
+    <li>Project each mushroom to pixels and keep the nearest one inside a pixel radius.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>On paper, start from a click on the plane and name every function until <code>clickedMushroomIndex</code> changes. Include <code>selectAtPointer</code>, <code>pickNearestMushroomIndex</code>, and <code>onSelect</code>.</li>
+    <li>Set <code>MUSHROOM_PICK_MAX_DISTANCE_PX</code> to <code>8</code>. Click near a cap, but not on the point the picker tests. The click should miss. Restore <code>40</code>.</li>
+    <li>Remove <code>+ index * 1.73</code> from the sine. Expandable mushrooms should inhale together. Put the offset back.</li>
+    <li>Temporarily pass <code>expandableMushroomsIndices={[]}</code> from <code>Terrain</code>. Nothing should breathe. Clicks should still set <code>clickedMushroomIndex</code>. Restore the real prop.</li>
+    <li>Take the placement <code>{ x: 2, y: 4, elevation: 0.2 }</code> and write the world position used by the instance, then the world position used by the picker.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Why does <code>expandableMushroomsIndices</code> live on <code>Terrain</code> when only the mushrooms read it and only the network writes it?</li>
+    <li>Why is the matrix write in <code>useFrame</code> for mushrooms and in <code>useLayoutEffect</code> for firs?</li>
+    <li>What does a breath of <code>1</code> tell the player?</li>
+    <li>What does the invisible plane know, and what does it hand off?</li>
+    <li>Why compare squared pixel distance to <code>40 * 40</code>?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. <code>clickedMushroomIndex</code> is stored in:</legend>
+      <label><input type="radio" name="q1" value="a"> <span><code>ScatteredMushrooms</code>, next to the instance matrices</span></label>
+      <label><input type="radio" name="q1" value="b"> <span><code>Terrain</code>, then passed into <code>MyceliumNetwork</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span><code>pickNearestMushroomIndex</code>, as a module global</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>The GLB, as an extra mesh</span></label>
+      <p class="explain">The parent owns the click. The mushrooms report an index. The network consumes it.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. Expandable mushrooms change size by:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Rebuilding the GLB geometry each frame</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Moving <code>placement.elevation</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Writing a new instance scale in <code>useFrame</code></span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Scaling the invisible pick plane</span></label>
+      <p class="explain">The geometry stays shared. Only that copy's matrix scale changes. <code>needsUpdate</code> uploads the buffer.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. <code>index * 1.73</code> inside the sine:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Shifts each mushroom's phase so they do not pulse in unison</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Is the pixel pick radius</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Converts elevation into world Y</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Selects which GLB part to draw</span></label>
+      <p class="explain">Same speed, different starting point on the wave. Remove it and every expandable cap moves together.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. The click lands on the invisible plane because:</legend>
+      <label><input type="radio" name="q4" value="a"> <span><code>InstancedMesh</code> cannot receive pointer events</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>The mushrooms are behind the camera</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Opacity 0 disables raycasting on every mesh</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>The instances set <code>raycast={null}</code>, and the plane is the event target</span></label>
+      <p class="explain">The plane reports a ground hit. <code>pickNearestMushroomIndex</code> then chooses a mushroom in pixels.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>5. A mushroom is ignored by the picker when:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>Its <code>placement.scale</code> is below 1</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>It is not in <code>expandableMushroomsIndices</code></span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Its projected <code>z</code> is outside <code>-1…1</code>, or no mushroom is within 40 pixels</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>The scatter mask at that pixel is gray</span></label>
+      <p class="explain">Clip <code>z</code> throws out mushrooms outside the camera volume. The pixel radius throws out clicks that only landed on empty ground.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can point at <code>Terrain</code> and say which state the click writes and which state the breath reads</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can walk one click from the plane to an index</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can say what the 40-pixel test measures</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You changed the phase offset, saw the mushrooms sync, and put it back</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can write <code>(x, elevation, -y)</code> and the picker's extra <code>0.18</code> from memory</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

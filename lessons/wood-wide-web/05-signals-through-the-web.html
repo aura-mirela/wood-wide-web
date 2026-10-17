@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 05 — Signals through the web</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <a href="04-the-hidden-network.html">← Lesson 04</a>
+  <span class="spacer"></span>
+  <a href="06-zoom-into-a-spore.html">Lesson 06 →</a>
+</nav>
+<main>
+  <p class="meta">Tracks: GLSL (pulses via attributes), particles on curves, UI panels for the science</p>
+  <h1>Lesson 05 — Signals through the web</h1>
+  <p class="episode"><strong>Episodes 5–6: Connect the trees &amp; watch the exchange.</strong> Click a node, a pulse travels the network to the trees; then nutrients flow both ways — sugar down from the tree (photosynthesis), water and minerals up from the fungus.</p>
+
+  <h2>Concepts</h2>
+  <ul>
+    <li><strong>A pulse is a moving window over <code>aDistance</code>.</strong> Everything you need was baked in lesson 04:
+      <pre><code>pulse = smoothstep(uFront - uWidth, uFront, aDistance)
+      * (1.0 - step(uFront, aDistance))</code></pre>
+      — brighten where <code>aDistance</code> is just behind <code>uFront</code>, advance <code>uFront</code> each frame. No geometry touched, no CPU work. Multiple pulses = small uniform array, loop in the shader.</li>
+    <li><strong>Direction matters.</strong> <code>aDistance</code> grows root→tips, so an advancing front is fungus→outward. For tree→fungus flow you run a front backwards. If you want per-click origins (pulse starts at the clicked node, not the root), bake a <em>second</em> attribute: distance from that node — or simpler, precompute distances from each clickable node and store the 2–3 you need as separate attributes.</li>
+    <li><strong>Nutrient particles on curves.</strong> The exchange is slower and more material than the light pulse: small glowing particles crawling along the hypha curves. You already have each branch as a <code>CatmullRomCurve3</code> — sample <code>curve.getPointAt((t * speed + offset) % 1)</code> for N particles per branch. CPU-updating a few hundred of these in <code>useFrame</code> is fine (write into an <code>InstancedMesh</code> or a <code>Points</code> position buffer). Two populations, two colors, opposite directions: blue-white sugar flowing down, warm amber minerals flowing up — exactly the storyboard's two-tone exchange.</li>
+    <li><strong>Tree roots join the party.</strong> Give each tree from lesson 01 a short root fan (same growth algorithm, grown downward/inward toward the nearest network node). Where root meets node, place a brighter junction glow. This is the "the forest is one organism" shot, so spend polish here.</li>
+    <li><strong>Teaching UI.</strong> This episode carries the actual science. Panels:
+      <ul>
+        <li>node click → small anchored label ("Mycelium — the underground network that connects the forest")</li>
+        <li>exchange view → a fixed legend card: <code>Tree → Fungi: sugars (photosynthesis)</code> / <code>Fungi → Tree: water &amp; minerals (from the soil)</code>, as in the inspiration.</li>
+        <li>UX rule: one concept on screen at a time. Panels appear when their subject becomes visible and get out of the way after.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Make nodes (from lesson 04) clickable: small invisible-ish sphere colliders at node positions with <code>onClick</code>; hover = node brightens + cursor pointer.</li>
+    <li>Implement the single-pulse shader against <code>aDistance</code>. Click → set <code>uFront = 0</code>, advance in <code>useFrame</code> with slight ease-out; fade the tail.</li>
+    <li>Extend to 3–4 simultaneous pulses (uniform arrays <code>uFronts[4]</code>). Overlapping pulses should add, then clamp — saturation at crossings looks electric.</li>
+    <li>Root fans per tree + junction glows where they meet the network.</li>
+    <li>Nutrient particle system along branch curves, two directions, two colors. Start with one branch, then all. Profile before optimizing.</li>
+    <li>The legend / info panels, with entrance–exit transitions consistent with lesson 02's card (one shared Panel component by now).</li>
+    <li>Sound hook (optional but Halloween-worthy): a soft sub-bass whoosh on pulse send. Even a single sample changes the feel completely.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ul>
+    <li>Make pulse speed natural: constant speed in <em>world units</em> means <code>uFront</code> advances linearly in <code>aDistance</code> — verify a pulse doesn't visibly accelerate on long straight branches vs twisty ones. If it does, your <code>aDistance</code> is per-segment-count, not per-length. Fix it.</li>
+    <li>When a pulse reaches a tree, make the tree respond: canopy glow blooms for a second (lerp a uniform on the tree material). Cause and effect must be legible.</li>
+    <li>Click-anywhere ambient mode: tiny automatic pulses fire every few seconds from random nodes so the network never looks dead while the user reads panels.</li>
+  </ul>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Write the moving-window pulse expression from memory and explain each term.</li>
+    <li>Why do light pulses live in the shader but nutrient particles on the CPU? What property of each makes that split right?</li>
+    <li>How would you implement "pulse starts at clicked node" efficiently, and what's wrong with recomputing graph distance in JS on every click? (Is anything?)</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. The pulse travels through the network geometry without touching it on the CPU because:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>The GPU simulates the physics</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Brightness is computed per-vertex from baked <code>aDistance</code> vs a moving <code>uFront</code> uniform</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>The geometry is re-uploaded each frame</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>three.js has a built-in pulse material</span></label>
+      <p class="explain">The moving-window trick: all data static, one scalar uniform animates everything.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>2. A pulse visibly speeds up on twisty branches. The bug is:</legend>
+      <label><input type="radio" name="q2" value="a"> <span><code>uFront</code> advances nonlinearly</span></label>
+      <label><input type="radio" name="q2" value="b"> <span><code>aDistance</code> was accumulated per segment count, not per segment <em>length</em></span></label>
+      <label><input type="radio" name="q2" value="c"> <span>The GPU interpolates varyings wrong</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Catmull-Rom overshoot</span></label>
+      <p class="explain">Equal <code>aDistance</code> steps must mean equal world-space millimeters, or speed depends on sampling density.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>3. Nutrient particles crawl along branches on the CPU (sampling <code>getPointAt</code>) rather than in the shader because:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>The GPU can't sample curves</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>There are few of them, they need exact on-curve positions, and CPU cost is negligible — simplicity wins</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>It's faster than the GPU</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Shaders can't move instanced geometry</span></label>
+      <p class="explain">Right tool for scale: hundreds of exact curve-followers = trivial CPU work; thousands of loose glows = shader.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>4. Two simultaneous pulses cross on a shared branch. With additive brightness you should:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>Prevent pulses from overlapping</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Let them add and clamp — the saturation flash reads as energy</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Average them</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>Z-sort them</span></label>
+      <p class="explain">Physical honesty aside, crossings are a storytelling gift; clamp to avoid blowout.</p>
+    </fieldset>
+    <fieldset data-answer="b">
+      <legend>5. UX: the sugar/mineral legend panel should appear:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>At experience start, so users are prepared</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>When the exchange becomes visible, and recede after</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>Permanently in a corner</span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Only on hover over a tree</span></label>
+      <p class="explain">One concept on screen at a time, synchronized with what the eye can currently verify.</p>
+    </fieldset>
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>Click a node → pulse radiates through the real network topology to the trees</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>Two-directional nutrient flow in two colors, readable at a glance</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>Trees visibly react when the signal arrives</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>Legend panel teaches the symbiosis in ≤ 2 sentences, in your own words</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain geometry, noise, and FBM</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="mask-based-scattering.html">Next: mask-based scattering →</a>
+</nav>
+<main>
+  <p class="meta">Procedural track · PlaneGeometry, simplex noise, FBM, vertex normals</p>
+  <h1>Terrain geometry, noise, and FBM</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> how this project builds the ground. A flat plane already has vertices. A noise function supplies one height number per point. Fractal Brownian motion stacks that noise into hills. <code>getTerrainElevation</code> is the public height query so trees and mushrooms sit on the same hills as the mesh.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>say what <code>PlaneGeometry</code> already contains before any displacement;</li>
+    <li>explain what <code>noise2D</code> returns, and what it does not return;</li>
+    <li>walk one FBM octave: frequency doubles, amplitude halves;</li>
+    <li>explain why <code>getTerrainElevation</code> exists beside the geometry loop;</li>
+    <li>name the three steps after the height loop: update the buffer, recompute normals, copy <code>uv</code> to <code>uv2</code>.</li>
+  </ul>
+
+  <h2>Where this lives</h2>
+  <table>
+    <tr><th>File</th><th>Job</th></tr>
+    <tr><td><code>src/lib/noises/noise2D.js</code></td><td>Simplex noise. One <code>(x, y)</code> in, one number out.</td></tr>
+    <tr><td><code>src/lib/createTerrainGeometry.js</code></td><td><code>fbm</code>, <code>getTerrainElevation</code>, and the mesh build.</td></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Caches the geometry with <code>useMemo</code> and disposes it on unmount.</td></tr>
+    <tr><td><code>src/lib/scatterObjectsOnTerrain.js</code></td><td>Calls <code>getTerrainElevation(x, y)</code> for each kept placement.</td></tr>
+  </table>
+  <p><code>Terrain</code> does not displace vertices itself. It asks <code>createTerrainGeometry()</code> once and hands that <code>PlaneGeometry</code> to the ground mesh.</p>
+
+  <h2>1. The plane starts full, and flat</h2>
+  <pre><code>const geometry = new PlaneGeometry(size, size, segments, segments)
+const positions = geometry.attributes.position</code></pre>
+  <p>Defaults in this project: <code>TERRAIN_SIZE = 20</code>, <code>TERRAIN_SEGMENTS = 256</code>.</p>
+  <p><code>segments</code> is the number of <em>quads</em> along one edge, not the number of vertices. Vertices are <code>segments + 1</code>, so this grid is <code>257 × 257</code> points (66,049 vertices). <code>positions</code> is already filled when you read it. It is not an empty buffer you push into.</p>
+  <p>A Three.js plane lies in the <strong>XY</strong> plane and is <strong>centered on the origin</strong>:</p>
+  <ul>
+    <li><code>x</code> and <code>y</code> run from <code>-size/2</code> to <code>+size/2</code> (here <code>-10</code> to <code>10</code>);</li>
+    <li><code>z</code> is <code>0</code> on every vertex. The ground is still a tabletop.</li>
+  </ul>
+  <p>The mesh in <code>Terrain.jsx</code> is later rotated <code>[-Math.PI / 2, 0, 0]</code>. That rotation lays local Z (height) onto world Y. The geometry function itself does not rotate anything. It only writes height into local <code>z</code>.</p>
+
+  <h2>2. What <code>noise2D</code> is</h2>
+  <p><code>noise2D(x, y)</code> in <code>src/lib/noises/noise2D.js</code> is a JavaScript port of Ashima’s 2D simplex noise. You do not tune the constants at the top of that file (<code>C</code>, <code>mod289</code>, <code>permute</code>). They are the published kernel: a grid hash, a smooth falloff, a gradient contribution. The useful contract is small:</p>
+  <ul>
+    <li><strong>Input:</strong> a point in 2D. Here that point is a place on the plane (or a scaled version of it).</li>
+    <li><strong>Output:</strong> <em>one</em> number, roughly in <code>-1 … 1</code>. Not a new <code>(x, y)</code>. Not a vertex. Not a color.</li>
+    <li><strong>Smooth:</strong> nearby inputs give nearby outputs, so hills do not sparkle from pixel to pixel.</li>
+    <li><strong>Repeatable:</strong> the same <code>(x, y)</code> always returns the same number. There is no seed in this file. The hills are the same every reload.</li>
+  </ul>
+  <p>One octave of raw noise looks like gentle, similar-sized bumps. Real ground has big ridges <em>and</em> small wrinkles. That stacking is FBM, not the noise function.</p>
+
+  <h2>3. FBM stacks five octaves</h2>
+  <p><strong>Fractal Brownian motion</strong> here means: sample the same noise several times, each time at a higher frequency and a lower amplitude, and add the samples.</p>
+  <pre><code>function fbm(x, y, frequency, amplitude) {
+  let value = 0
+  let amp = amplitude
+  let sampleX = x * frequency
+  let sampleY = y * frequency
+
+  for (let i = 0; i < 5; i++) {
+    value += amp * noise2D(sampleX, sampleY)
+    sampleX *= 2
+    sampleY *= 2
+    amp *= 0.5
+  }
+
+  return value
+}</code></pre>
+  <p>Defaults: <code>TERRAIN_FREQUENCY = 0.1</code>, <code>TERRAIN_AMPLITUDE = 0.25</code>. Five passes:</p>
+  <table>
+    <tr><th>Pass</th><th>What changes</th><th>What you see</th></tr>
+    <tr><td>0</td><td>sample at <code>0.1×</code>, weight <code>0.25</code></td><td>the broad hills</td></tr>
+    <tr><td>1</td><td>frequency ×2, amplitude ×0.5</td><td>ridges on those hills</td></tr>
+    <tr><td>2–4</td><td>same rule, three more times</td><td>smaller and smaller wrinkles</td></tr>
+  </table>
+  <p><strong>Frequency</strong> is how zoomed-in the noise is. Higher frequency → more bumps across the same 20-unit plane. <strong>Amplitude</strong> is how tall that pass is allowed to be. Halving it each pass keeps the small wrinkles from overpowering the big shape. This is often called <em>lacunarity</em> 2 and <em>gain</em> 0.5. This file just writes <code>*= 2</code> and <code>*= 0.5</code>.</p>
+  <p>The return value is still <strong>one height</strong>, the sum of the five weighted noises. It is the number that will be stored as <code>z</code>.</p>
+
+  <h2>4. <code>getTerrainElevation</code> is FBM with the terrain defaults</h2>
+  <pre><code>export function getTerrainElevation(x, y, frequency = TERRAIN_FREQUENCY, amplitude = TERRAIN_AMPLITUDE) {
+  return fbm(x, y, frequency, amplitude)
+}</code></pre>
+  <p>It does not build a mesh. It does not return coordinates. <code>x</code> and <code>y</code> are <strong>inputs</strong> (“how high is the ground <em>here</em>?”). The return is the FBM height at that plane point.</p>
+  <p>The geometry loop could call <code>fbm</code> directly, and it does. Scatter cannot, unless it imports a private function. <code>getTerrainElevation</code> is the public door, locked to the same frequency and amplitude as the mesh. If those two ever diverge, trees float or sink through the hills.</p>
+  <p>Scatter points are usually <strong>between</strong> vertices. You cannot look up “vertex 4827.” You evaluate the same function at the candidate’s <code>(x, y)</code>. Because noise is continuous, that height matches the surface the triangles draw.</p>
+
+  <h2>5. Writing height, then normals, then <code>uv2</code></h2>
+  <pre><code>for (let i = 0; i < positions.count; i++) {
+  const elevation = fbm(
+    positions.getX(i),
+    positions.getY(i),
+    frequency,
+    amplitude,
+  )
+
+  positions.setZ(i, elevation)
+}
+
+positions.needsUpdate = true
+geometry.computeVertexNormals()
+geometry.setAttribute('uv2', geometry.attributes.uv.clone())</code></pre>
+  <ol>
+    <li><strong><code>getX</code> / <code>getY</code></strong> — read the flat grid. Do not invent new vertices.</li>
+    <li><strong><code>setZ</code></strong> — replace the flat <code>0</code> with FBM height. <code>x</code> and <code>y</code> stay put.</li>
+    <li><strong><code>needsUpdate = true</code></strong> — tell Three.js the position buffer changed, so the GPU copy is refreshed.</li>
+    <li><strong><code>computeVertexNormals()</code></strong> — rebuild the <code>normal</code> attribute from the new triangles. A plane’s original normals all point along +Z. After hills, that would light the ground as if it were still flat. This is the recompute. It happens on the CPU, in this function, not in a shader.</li>
+    <li><strong><code>uv2</code></strong> — <code>PlaneGeometry</code> already has <code>uv</code> (0–1 unwrap). <code>MeshStandardMaterial</code> reads the <strong>AO map from <code>uv2</code></strong>, and albedo / normal / roughness / bump from <code>uv</code>. Cloning <code>uv</code> into <code>uv2</code> makes the pine-root AO line up with the other maps. <code>clone()</code> matters so the two attributes do not share one buffer.</li>
+  </ol>
+  <p><code>TerrainPBRMaterial</code> never sees FBM. It only shades the geometry this function returned: color maps, plus a small <code>bumpMap</code> from the height texture for bark-scale detail. The big hills are already in the vertex positions.</p>
+
+  <h2>6. Why this is JavaScript, not a vertex shader</h2>
+  <p>A vertex shader could add FBM on the GPU every frame. This project does not. Height is baked once when the geometry is created, for two reasons that have to agree:</p>
+  <ul>
+    <li><strong>Normals.</strong> <code>computeVertexNormals()</code> reads positions on the CPU. If the shader moved vertices afterward, those normals would still describe the flat plane.</li>
+    <li><strong>Scatter.</strong> <code>getTerrainElevation</code> is CPU code. It can only match the mesh if the mesh used the same CPU function.</li>
+  </ul>
+  <p><code>Terrain</code> caches the result:</p>
+  <pre><code>const geometry = useMemo(() => createTerrainGeometry(), [])
+useEffect(() => () => geometry.dispose(), [geometry])</code></pre>
+  <p>Empty deps means “build once per mount.” <code>dispose</code> frees the GPU buffers when <code>Terrain</code> unmounts. The hills do not animate, so there is nothing to recompute per frame.</p>
+
+  <h2>Build steps (from this codebase)</h2>
+  <ol>
+    <li>Put simplex <code>noise2D</code> in <code>src/lib/noises/noise2D.js</code>. Prove one call returns a finite number, and the same inputs return the same number.</li>
+    <li>Write <code>fbm</code> with 5 octaves, <code>*= 2</code> and <code>*= 0.5</code>.</li>
+    <li>Export <code>getTerrainElevation</code> with the terrain frequency and amplitude as defaults.</li>
+    <li>Create a <code>PlaneGeometry</code>, set each <code>z</code> from <code>fbm(x, y)</code>, then <code>computeVertexNormals()</code>.</li>
+    <li>Clone <code>uv</code> to <code>uv2</code> so the PBR AO map has a UV set.</li>
+    <li>Cache that geometry in <code>Terrain</code> and rotate the mesh <code>-90°</code> on X when you draw it.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Log <code>positions.getZ(0)</code> before the loop and after. Before must be <code>0</code>. After must be the FBM value.</li>
+    <li>Temporarily set the loop to 1 octave (change <code>5</code> to <code>1</code>). The ground should look like one scale of bumps. Put <code>5</code> back.</li>
+    <li>Double <code>TERRAIN_FREQUENCY</code> only. Predict more bumps across the same 20-unit square, not taller mountains. Then try doubling <code>TERRAIN_AMPLITUDE</code> instead.</li>
+    <li>Comment out <code>computeVertexNormals()</code>. The hills stay, but the lighting goes flat. Write one sentence about why.</li>
+    <li>Call <code>getTerrainElevation</code> at a vertex’s <code>(x, y)</code> and compare it to that vertex’s <code>z</code>. They must match.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>Is <code>positions</code> empty when <code>createTerrainGeometry</code> first reads it?</li>
+    <li>What does <code>noise2D</code> return, and what are <code>x</code> and <code>y</code> — inputs or outputs?</li>
+    <li>In one FBM pass, which number doubles and which number halves?</li>
+    <li>Why does scatter call <code>getTerrainElevation</code> instead of reading a vertex?</li>
+    <li>What breaks if you displace in a shader but leave normals from the flat plane?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. Right after <code>new PlaneGeometry(20, 20, 256, 256)</code>, the position attribute:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>Is empty until the FBM loop pushes vertices</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Already holds a flat 257×257 grid, with <code>z = 0</code></span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Already holds the hills</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Stores only UVs</span></label>
+      <p class="explain"><code>segments</code> counts quads. Vertices are <code>segments + 1</code>. FBM overwrites <code>z</code>; it does not create the grid.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. <code>noise2D(x, y)</code> returns:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>A new <code>(x, y)</code> pair on the plane</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>A vertex index</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>One number, roughly <code>-1 … 1</code>, for that input point</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Five octaves already summed</span></label>
+      <p class="explain">Simplex noise is one sample. FBM is the function that calls it five times and adds them.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. Each FBM octave in this file:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Doubles the sample coordinates and halves the amplitude</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Halves the sample coordinates and doubles the amplitude</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Adds a new vertex</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Reads the scatter mask</span></label>
+      <p class="explain"><code>sampleX *= 2</code> and <code>amp *= 0.5</code>. Higher frequency, smaller height.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. <code>getTerrainElevation(x, y)</code> is used by scatter because:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>It returns the vertex coordinates of the hills</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>It rotates the plane onto the ground</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>It samples the density mask</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>A placement is usually between vertices, so it must evaluate the same height function</span></label>
+      <p class="explain">The return value is one height (local <code>z</code>). The instance later places the object at <code>(x, elevation, -y)</code>.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>5. <code>geometry.computeVertexNormals()</code> must run after <code>setZ</code> because:</legend>
+      <label><input type="radio" name="q5" value="a"> <span>It creates the position attribute</span></label>
+      <label><input type="radio" name="q5" value="b"> <span>Normals from the flat plane would light hills as if they were still flat</span></label>
+      <label><input type="radio" name="q5" value="c"> <span>It copies <code>uv</code> to <code>uv2</code></span></label>
+      <label><input type="radio" name="q5" value="d"> <span>Three.js requires it before <code>PlaneGeometry</code> can be constructed</span></label>
+      <p class="explain">Normals are derived from the triangles. If you compute them before displacement, they describe the tabletop.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can describe the flat grid <code>PlaneGeometry</code> builds before FBM</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say what <code>noise2D</code> returns, and that FBM calls it five times</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can explain frequency vs amplitude in one sentence each</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You know <code>getTerrainElevation</code> returns a height, and why scatter needs that call</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You can name why normals are recomputed after <code>setZ</code>, and why <code>uv2</code> is cloned</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-6"> <span>You scored at least 4/5 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>
