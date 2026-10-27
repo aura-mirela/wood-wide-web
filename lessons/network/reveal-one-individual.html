@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reveal one individual</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="one-species-many-individuals.html">← One species, several individuals</a>
+  <span class="spacer"></span>
+  <a href="../index.html">All lessons</a>
+</nav>
+<main>
+  <p class="meta">Network track · the line, the click, the hand, and the camera</p>
+  <h1>Reveal one individual</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> how a click shows the mycelium that <a href="one-species-many-individuals.html">One species, several individuals</a> already stored. The individual exists on load. The click reveals it: its soil lines, its root flares, and a closer view from above. The blocks below are pseudocode for files you have not written yet.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>say why the canvas stayed black, and which list caused it;</li>
+    <li>draw <code>&lt;Line&gt;</code> only for a revealed individual’s <code>myceliumStrands</code>;</li>
+    <li>trace a click from the mushroom index to that individual’s id, and a second click that adds the next individual;</li>
+    <li>say where the hand cursor already lives, and why it never shows until <code>onSelect</code> is passed;</li>
+    <li>put the orbit ease in a component that <code>Experience.jsx</code> renders, and say why the polar clamp has to open.</li>
+  </ul>
+
+  <h2>What you already have</h2>
+  <table>
+    <tr><th>File</th><th>Keeps doing</th></tr>
+    <tr><td><code>src/lib/assignFungalIndividuals.js</code></td><td>Builds the individual list once. Each record has <code>mushroomIndices</code>, <code>rootIndices</code>, and <code>myceliumStrands</code>.</td></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Scatters firs and mushrooms and calls <code>assignFungalIndividuals</code>. Today it also concatenates every <code>rootIndices</code> and passes that whole list to the flares.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredRootFlares.jsx</code></td><td>Instances the trunk scan for the indexes it is given. An empty list draws nothing.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredMushrooms.jsx</code></td><td>Instances the caps. <code>MushroomHitTargets</code> picks a mushroom and sets the hand cursor, and it mounts only when <code>onSelect</code> is passed. <code>Terrain</code> does not pass it yet.</td></tr>
+    <tr><td><code>src/Experience.jsx</code></td><td>Mounts <code>&lt;OrbitControls&gt;</code> locked to a horizon view: both polar angles <code>1.51</code>, target <code>[-2, 1, -3.5]</code>, distance 12–16.</td></tr>
+    <tr><td><code>src/lib/scatterObjectsOnTerrain.js</code></td><td>Returns placement records. It does not know about the camera or a click.</td></tr>
+  </table>
+
+  <h2>What this beat adds</h2>
+  <table>
+    <tr><th>Future file</th><th>Job</th></tr>
+    <tr><td><code>src/3d-components/MyceliumLines.jsx</code></td><td>One <code>&lt;Line worldUnits&gt;</code> per strand of each revealed individual. Draws nothing before the first click.</td></tr>
+    <tr><td><code>src/3d-components/ForestOrbit.jsx</code></td><td>The horizon lock, and the ease onto the clicked mushroom once <code>Experience</code> has a focus.</td></tr>
+  </table>
+  <p>Leave the old point web deleted: <code>MyceliumNetwork.jsx</code>, <code>buildMyceliumConnections.js</code>, and <code>src/shaders/mycelium-network/</code>. Those files linked any mushroom within range. Membership already replaced that rule.</p>
+
+  <h2>1. The black frame was the root scan</h2>
+  <p>A previous attempt stayed black. The line component was in that attempt, and the undo took the line with it. The frame died because <code>ScatteredRootFlares</code> was mounted for every colonized fir at once. On a medium screen that was 56 copies of the five-chunk scan, about 300,000 vertices each. One frame was trying to draw about 23 million triangles, so the canvas never finished a frame.</p>
+  <p>The ground, the firs, and the mushrooms in that same view are about 855,000 triangles. <code>ScatteredRootFlares</code> already returns nothing when <code>rootIndices</code> is empty. The caller is what still selects every fir:</p>
+  <pre><code>rootIndices = individuals.flatMap(individual =&gt; individual.rootIndices)
+ScatteredRootFlares(placements, rootIndices)</code></pre>
+  <p>This beat closes that. Pass <code>rootIndices</code> only for individuals whose id is in the revealed list. Before the first click that list is empty, so the scan is not instanced. A click adds the flares for that one individual: a handful of firs, not the forest.</p>
+  <pre><code>revealedRootIndices(individuals, revealedIds):
+  roots = []
+  for each individual in individuals:
+    if revealedIds contains individual.id:
+      append individual.rootIndices
+  return roots</code></pre>
+  <p>A soil line cannot reproduce that triangle count. One strand is a short ribbon. One individual has a handful of strands. The line also does not load <code>fir_trunk._spruce_trunk.glb</code>.</p>
+
+  <h2>2. Lines for the revealed strands</h2>
+  <p><code>&lt;Line&gt;</code> from drei draws the points you give it. It has no click of its own. The gate is the list <code>Terrain</code> passes in. Start <code>revealedIds</code> at <code>[]</code>. <code>MyceliumLines</code> maps that list, so the first frame mounts zero lines.</p>
+  <p>A strand end is <code>{ kind: 'mushroom' | 'root', index }</code>. A mushroom end reads <code>mushroomPlacements</code>. A root end reads <code>treePlacements</code>, the same fir index the flare uses. Sample about a dozen points along the ground. Placement <code>y</code> is the ground axis; the scene stores it as world <code>z = -y</code>, the same mapping the mushrooms use.</p>
+  <pre><code>MyceliumLines(revealedIndividuals, mushroomPlacements, treePlacements):
+  if revealedIndividuals is empty:
+    draw nothing
+
+  for each individual in revealedIndividuals:
+    color = a warm color for this id, the first one #ffc56a
+    for each strand in individual.myceliumStrands:
+      samples = []
+      for t from 0 to 1, about a dozen steps:
+        x, y = lerp the two ends on the ground plane
+        slide x, y sideways by a small bend
+          that is 0 at both ends and stable for this strand
+        height = getTerrainElevation(x, y) + 0.07
+        append [x, height, -y]
+      draw Line(
+        points = samples,
+        color,
+        lineWidth = 0.045,
+        worldUnits
+      )</code></pre>
+  <p><code>worldUnits</code> keeps the stroke a hair in the world when the camera comes closer. A pixel width would stay a constant screen stroke. Orange and cyan stay reserved for the later exchange on the bark. Two revealed individuals keep two warm colors so their webs stay distinct. The caps stay one model.</p>
+
+  <h2>3. The click appends one id</h2>
+  <p>The individual is already in memory. The click looks the mushroom index up in <code>mushroomIndices</code> and appends that id. It does not walk the whole placement list, and it does not build a neighbor star.</p>
+  <pre><code>on mushroom click(index):
+  individual = the individual whose mushroomIndices contain index
+  if individual is missing:
+    return
+  if revealedIds does not include individual.id:
+    append individual.id
+  focus = mushroomPlacements[index]
+
+Terrain renders:
+  MyceliumLines(individuals whose id is in revealedIds)
+  ScatteredRootFlares(revealedRootIndices)
+  ScatteredMushrooms(onSelect = this click)</code></pre>
+  <p>Walk the example. Mushrooms 1, 2, and 3 belong to A. Mushrooms 4 and 5 belong to B.</p>
+  <ul>
+    <li>Click mushroom 2. Append A. Draw A’s strands and A’s flares. B stays dark.</li>
+    <li>Click mushroom 4 later. Append B. A’s lines stay. B’s lines are added.</li>
+  </ul>
+  <p>The same click stops the breath on that individual’s mushrooms. They hold resting scale. Every other cap keeps the shared pulse (<code>BREATH_AMPLITUDE</code> 0.4, <code>BREATH_SPEED</code> 2.5, phase <code>index * 1.73</code>). A different speed per individual would label the groups before the click.</p>
+
+  <h2>4. The hand is already written</h2>
+  <p>The instanced caps set <code>raycast</code> to null, so a CSS hover on the mushroom mesh never fires. <code>MushroomHitTargets</code> is an invisible plane over the terrain. On pointer move it calls <code>pickNearestMushroomIndex</code> with a 40px radius. Inside that radius the cursor is <code>pointer</code>. Outside it, and on pointer out, the cursor is <code>auto</code>. Click and tap use that same plane’s <code>onClick</code>.</p>
+  <pre><code>MushroomHitTargets mounts only when onSelect is passed
+
+on pointer move:
+  index = pickNearestMushroomIndex(placements, pointer, camera, 40px)
+  cursor = pointer when index is a mushroom
+  cursor = auto otherwise
+
+on click or tap:
+  the same pick
+  if index is a mushroom:
+    onSelect(index)</code></pre>
+  <p>Passing <code>onSelect</code> from <code>Terrain</code> is what mounts the plane. Until then the pick, the click, and the hand are all absent.</p>
+
+  <h2>5. The camera component lives in Experience</h2>
+  <p>Lines on the soil are edge-on from the horizon lock. The click eases the orbit target onto the clicked mushroom, shortens the distance, and lowers the polar angle so the patch is seen from above.</p>
+  <p>That behavior is a component, <code>ForestOrbit</code>, rendered by <code>Experience.jsx</code>. <code>Experience</code> already owns the canvas, the tier, and the horizon lock. <code>scatterObjectsOnTerrain</code> stays the function that returns placements. It runs once, outside the canvas, and never sees the camera.</p>
+  <p>A plain function can name the destination. It cannot ease the camera. The ease needs <code>useFrame</code> and the controls object, which exist only inside the canvas. <code>ForestOrbit</code> holds both the <code>&lt;OrbitControls&gt;</code> limits and that frame loop. <code>Terrain</code> reports the clicked placement upward. <code>Experience</code> stores it as <code>focus</code> and passes it in.</p>
+  <pre><code>Experience:
+  focus = null
+  ForestOrbit(tier, focus)
+  Terrain(onFocus = (placement) =&gt; focus = placement)
+
+ForestOrbit(tier, focus):
+  OrbitControls
+    while focus is null:
+      minPolarAngle = maxPolarAngle = 1.51
+      minDistance, maxDistance = the tier (12–16)
+      target starts at [-2, 1, -3.5]
+    once focus is set:
+      minPolarAngle about 0.9
+      maxPolarAngle stays 1.51
+      minDistance about 5
+      maxDistance stays the tier max
+
+  each frame, once focus is set:
+    ease controls.target to (focus.x, focus.elevation, -focus.y)
+    ease polar angle down, toward about 1.05
+    ease distance in, toward about 7
+    keep the current side of the patch
+    controls.update()</code></pre>
+  <p>Both polar limits are <code>1.51</code> today, and distance cannot go under 12. If those props stay locked, the rig moves the camera and the next controls update pulls it back to the horizon. The limits have to open on the same component that eases. After the ease starts, do not pass a fresh <code>target={[-2, 1, -3.5]}</code> on every render. That pins the orbit center to the old view. The angles and the radius above are starting points. The requirement is a shorter distance and a lower polar angle. Leave the azimuth window as it is.</p>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>In <code>Terrain</code>, keep <code>revealedIds</code> and replace the flat list of every <code>rootIndices</code> with the revealed firs only. Before a click, pass <code>[]</code>.</li>
+    <li>Pass <code>onSelect</code> into <code>ScatteredMushrooms</code>. On that index, append the matching individual id and report the placement as <code>focus</code>.</li>
+    <li>Add <code>MyceliumLines</code> and mount it with the revealed individuals only. One <code>&lt;Line worldUnits&gt;</code> per <code>myceliumStrand</code>.</li>
+    <li>Stop the breath on the mushrooms whose indexes belong to a revealed individual. Leave every other cap on the shared pulse.</li>
+    <li>Add <code>ForestOrbit</code>. Import it in <code>Experience.jsx</code> in place of the inline <code>&lt;OrbitControls&gt;</code>. Open the polar and distance limits when <code>focus</code> is set, and ease the target onto the clicked mushroom.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>On paper, click mushroom 2, then mushroom 4. Write which strand lists and which <code>rootIndices</code> are passed after each click, and what is passed before either click.</li>
+    <li>Point at the <code>rootIndices</code> memo in <code>Terrain.jsx</code>. Say what it selects today, and what one frame costs when that list is every colonized fir.</li>
+    <li>From <code>Experience.jsx</code>, write the two clamps that would undo an ease even if <code>controls.target</code> moved.</li>
+    <li>Find <code>MushroomHitTargets</code>. Name the prop that mounts it, and the test that turns the cursor into a hand.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What is in the scene before the first click: lines, flares, both, or neither?</li>
+    <li>A second click reveals individual B. What happens to A’s lines?</li>
+    <li>Why does <code>ForestOrbit</code> belong in <code>Experience.jsx</code>, and what does <code>scatterObjectsOnTerrain</code> keep doing?</li>
+    <li>Why does a lower polar angle inside <code>useFrame</code> fail while <code>minPolarAngle</code> and <code>maxPolarAngle</code> are both <code>1.51</code>?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. The canvas stayed black because:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>One <code>&lt;Line&gt;</code> per strand of the whole forest</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>The trunk scan was instanced under every colonized fir, about 23 million triangles in one frame</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>The hand cursor forced a second canvas</span></label>
+      <label><input type="radio" name="q1" value="d"> <span><code>assignFungalIndividuals</code> rebuilt the list on every frame</span></label>
+      <p class="explain">The scan is five chunks and about 300,000 vertices. Fifty-six copies never finished a frame. The lines draw nothing until a click, and then only a handful of ribbons.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. After clicking mushroom 2, then mushroom 4, the lines on screen are:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Only B, because a click replaces the previous reveal</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Every strand whose gap is under the tier distance, including links from A into B</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>A’s strands and B’s strands. Each click appended one id</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Nothing until the camera finishes easing</span></label>
+      <p class="explain">The click looks the index up in <code>mushroomIndices</code> and appends that id. A stays revealed when B is added.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. The pointer cursor appears when:</legend>
+      <label><input type="radio" name="q3" value="a"> <span><code>onSelect</code> is passed, the hit plane is mounted, and the pointer is within 40px of a mushroom</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>The instanced cap mesh receives a CSS hover</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Any pointer move over the terrain, because the plane covers the ground</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>The camera has eased onto a mushroom</span></label>
+      <p class="explain">The caps do not raycast. The plane does. The 40px pick is what limits the hand to a mushroom, and the plane mounts only with <code>onSelect</code>.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. <code>ForestOrbit</code> is rendered by:</legend>
+      <label><input type="radio" name="q4" value="a"> <span><code>scatterObjectsOnTerrain</code>, because the focus is a placement</span></label>
+      <label><input type="radio" name="q4" value="b"> <span><code>MyceliumLines</code>, because the camera move is part of the strand</span></label>
+      <label><input type="radio" name="q4" value="c"> <span><code>ScatteredMushrooms</code>, next to the hit plane</span></label>
+      <label><input type="radio" name="q4" value="d"> <span><code>Experience.jsx</code>, which passes the tier and the focus from the click</span></label>
+      <p class="explain"><code>Experience</code> owns the canvas and the horizon lock. The scatter function only returns placements. The polar and distance limits have to open on this component or the ease is clamped back.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can say what is drawn before a click, and what one click adds</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can name the list that instanced the trunk scan under every fir</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can walk mushroom 2, then mushroom 4, and say which lines remain</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can say why the hand cursor needs <code>onSelect</code>, and why <code>ForestOrbit</code> is imported from <code>Experience.jsx</code></span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You scored at least 3/4 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

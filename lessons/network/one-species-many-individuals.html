@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One species, several individuals</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="fungal-individuals.html">← The mushroom is the apple</a>
+  <span class="spacer"></span>
+  <a href="reveal-one-individual.html">Next: reveal one individual →</a>
+</nav>
+<main>
+  <p class="meta">Network track · membership, the root scan, lines, and the overlay</p>
+  <h1>One species, several individuals</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> how the forest you already scatter becomes the picture from <a href="fungal-individuals.html">The mushroom is the apple</a>. One fly agaric model. Several individuals underneath. A click reveals one individual: its mycelium, its root flares, and the exchange on its firs. The blocks below are pseudocode for files you have not written yet.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>trace a click on mushroom 2 to individual A, and say why mushroom 4 stays dark;</li>
+    <li>name the files you already have and the files this beat adds;</li>
+    <li>place <code>fir_trunk._spruce_trunk.glb</code> from the same fir placements, on the revealed firs only;</li>
+    <li>give the soil threads to <code>&lt;Line&gt;</code> and the drifting spores to <code>&lt;points&gt;</code>;</li>
+    <li>say which overlay block is the chapter, which is the gesture, and which is the exchange legend.</li>
+  </ul>
+
+  <h2>What you already have</h2>
+  <table>
+    <tr><th>File</th><th>Keeps doing</th></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Scatters firs and mushrooms, holds <code>clickedMushroomIndex</code>, renders the network.</td></tr>
+    <tr><td><code>src/lib/scatterObjectsOnTerrain.js</code></td><td>One placement list per model. Firs and mushrooms already come from separate masks and seeds.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredFirTrees.jsx</code></td><td>Instances <code>fir_tree.glb</code> from <code>treePlacements</code>. The fir has no roots. Its base sits at <code>y = 0</code> in model space, about 4.4 units tall before <code>placement.scale</code>.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredMushrooms.jsx</code></td><td>Instances the caps and reports a click as an index into <code>mushroomPlacements</code>.</td></tr>
+    <tr><td><code>src/3d-components/MyceliumNetwork.jsx</code></td><td>Stores clicks and draws the revealed web. Today it draws points. The strand list is the part that changes.</td></tr>
+    <tr><td><code>src/lib/buildMyceliumConnections.js</code></td><td>Builds a star from distance: any mushroom within range, up to five neighbors. That rule is what membership replaces. The Bézier samples can still become the points of a line.</td></tr>
+    <tr><td><code>src/shaders/mycelium-network/</code></td><td>A soft point sprite. That shader moves to the spore cloud. The soil web stops using it.</td></tr>
+    <tr><td><code>src/ui-components/StoryOverlay.jsx</code></td><td>A fixed, click-through layer. It already stacks <code>StoryChapter</code> and <code>Action</code>. Both are still placeholders.</td></tr>
+    <tr><td><code>src/story/storyText.js</code></td><td>Chapter title, paragraph, and optional action. No markup.</td></tr>
+    <tr><td><code>public/models/fir_trunk._spruce_trunk.glb</code></td><td>On disk, not in the scene.</td></tr>
+  </table>
+
+  <h2>What this beat adds</h2>
+  <table>
+    <tr><th>Future file</th><th>Job</th></tr>
+    <tr><td><code>src/lib/assignFungalIndividuals.js</code></td><td>Pure function. Placements in, individuals out. No React.</td></tr>
+    <tr><td><code>MyceliumNetwork</code>, revised</td><td>Looks up the clicked mushroom’s individual and reveals that record only.</td></tr>
+    <tr><td><code>src/3d-components/RootFlares.jsx</code></td><td>Instances the trunk scan under the revealed firs, with the same placement records and its own scale.</td></tr>
+    <tr><td><code>src/ui-components/ExchangeLegend.jsx</code></td><td>The two cards from the exchange panel. A third child of <code>StoryOverlay</code>.</td></tr>
+    <tr><td>A spore component, later</td><td><code>&lt;points&gt;</code> with birth, drift, and fade. Not the mycelium.</td></tr>
+    <tr><td>A trunk ribbon, later</td><td>The orange and cyan arrows on the bark of the revealed firs. Not a <code>&lt;Line&gt;</code>.</td></tr>
+  </table>
+
+  <h2>1. Individuals are patches, built once</h2>
+  <p>Build the list when the placements exist. A click only reads it. Each individual is one patch of soil: mushrooms that already sit near each other, plus the firs whose bases fall in that same patch.</p>
+  <pre><code>assignFungalIndividuals(mushroomPlacements, treePlacements, patchRadius):
+  individuals = []
+
+  for each mushroom index:
+    patch = the individual whose patch this mushroom falls inside
+    if patch is missing:
+      start a new individual at this mushroom
+    else:
+      add this mushroom to that individual
+
+  for each individual:
+    individual.treeIndices = firs whose base is inside the patch
+    individual.strands = nearest-neighbor links
+      using only this individual's mushrooms
+    individual.rootLinks = one link from the nearest of those mushrooms
+      to each of its firs
+
+  return individuals</code></pre>
+  <p>Distance still decides which mushrooms share a patch, and which pairs become a strand. It no longer decides which network a click may enter. A mushroom near the edge of patch A is a member of A. It does not grow a strand into B.</p>
+
+  <h2>2. A click resolves through membership</h2>
+  <pre><code>on mushroom click(index):
+  individual = the individual whose mushroomIndices contain index
+  revealedId = individual.id
+
+draw:
+  strands of revealedId
+  root flares of revealedId.treeIndices
+  leave every other individual dark</code></pre>
+  <p>Walk the example. Mushrooms 1, 2, and 3 belong to A, with firs A and B. Mushrooms 4 and 5 belong to B, with fir C.</p>
+  <ul>
+    <li>Click mushroom 2. Reveal mycelium A and the exchange on firs A and B.</li>
+    <li>Mushrooms 4 and 5 stay dark, even when one of them is the nearest mushroom in the scene.</li>
+    <li>Click mushroom 4 later. Reveal mycelium B and fir C on their own.</li>
+  </ul>
+  <p><code>buildNeighborStar</code> does the other thing today. It links the clicked index to nearby indexes and will join A to B when mushroom 3 sits close to mushroom 4. The new click handler never calls it with the whole placement list.</p>
+
+  <h2>3. The root scan under the revealed firs</h2>
+  <p><code>public/models/fir_trunk._spruce_trunk.glb</code> is a photogrammetry scan, Sketchfab title “Fir trunk. Spruce trunk,” license CC-BY-NC-SA. The fir model is CC-BY. Five meshes in the file are chunks of that one scan, split near the 65,000-vertex limit. Together they are about 300,000 vertices. The bounds match, so you draw all five, and you draw them only for the firs of the revealed individual. Instancing the scan under every desktop fir is about 80 copies of that vertex load.</p>
+  <p>In scene space the fir stands from <code>y = 0</code> to about <code>4.4</code>, and the scan hangs from about <code>y = -0.09</code> down to <code>y = -2.17</code>. It is about 2.3 units wide, which is as wide as the whole fir, and its center sits about 0.37 off the origin on X. Look at the scan once before you commit: the title names a fir trunk and a spruce trunk, so both stumps may be in the mesh.</p>
+  <pre><code>RootFlares(treePlacements, revealedTreeIndices):
+  load the trunk scan
+  for each mesh chunk in the scan:
+    instance it
+
+  for each placement index in revealedTreeIndices:
+    use that fir's x, elevation, rotationY
+    use a rootScale smaller than placement.scale
+    shift X so the flare center sits on the trunk axis
+    shift Y so the collar meets the soil
+    leave the rest of the scan below the terrain
+
+  skip every fir that is not in the revealed individual</code></pre>
+  <p>Same placement list, not a second scatter. A second seed would put flares under empty ground. Terrain relief is only about 0.35, so a sunk scan stays buried except for the collar you chose to leave at the surface. Mycelium <code>rootLinks</code> end at that collar, not at the center of the trunk.</p>
+
+  <h2>4. Lines for hyphae, points for spores</h2>
+  <p>A strand inside one individual is a continuous hypha. drei’s <code>&lt;Line&gt;</code> is that stroke. Give it the Bézier samples you already know how to build, one line per strand, with <code>worldUnits</code> so the thickness stays a hair in the world when the camera comes closer. A revealed individual has a handful of strands, so one line each is enough. Pixel width would stay a constant screen stroke.</p>
+  <pre><code>MyceliumLines(individual):
+  for each strand in individual.strands and individual.rootLinks:
+    samples = points along that strand, on the terrain, slightly above it
+    draw Line(points = samples, worldUnits, a hair width)
+
+SporeCloud, later, separate component:
+  each point stores a birthplace on a cap, a direction, and a lifetime
+  the vertex shader moves it from uTime
+  the fragment shader is the soft disc you already have</code></pre>
+  <p>The orange and cyan arrows on the bark are a later ribbon on the revealed firs. <code>&lt;Line&gt;</code> does not taper, soften, or form those arrowheads. The soil web and the trunk exchange stay two drawings.</p>
+
+  <h2>5. The overlay for this beat</h2>
+  <p><code>StoryOverlay</code> is <code>position: fixed</code> over the page, with <code>pointer-events: none</code>, so a click still hits a mushroom. It renders two placeholders today:</p>
+  <pre><code>StoryOverlay:
+  StoryChapter
+  Action</code></pre>
+  <p><code>StoryChapter</code> is the heading and the paragraph. <code>Action</code> is the gesture: a round icon and one sentence, and only when the paragraph does not already say that gesture. The two science cards on the exchange panel are neither. They are a new sibling, <code>ExchangeLegend</code>, shown only after a click has revealed an individual.</p>
+  <pre><code>StoryOverlay:
+  StoryChapter          // heading + paragraph, from storyText.js
+  ExchangeLegend        // only when an individual is revealed
+  Action                // only when this chapter has a gesture
+
+before any individual is revealed:
+  title: Meet one individual
+  body: Every mushroom here is a fly agaric.
+        A click reveals one underground individual,
+        not every mushroom nearby.
+  action: Click a mushroom.
+  legend: hidden
+
+after mushroom 2 reveals individual A:
+  title: See the exchange
+  body: This fly agaric is one individual.
+        Its mycelium reaches these firs.
+        Sugars move down from the tree.
+        Water and minerals move up from the fungus.
+  action: Watch the flow.
+  legend:
+    Tree → Fungi    sugars from photosynthesis
+    Fungi → Tree    water and minerals from the soil</code></pre>
+  <p>The legend copy is the two cards in <code>public/inspiration/storyboard.png</code>. It stays out of <code>Action</code> and out of <code>StoryChapter</code>. <code>storyText.js</code> keeps the words. <code>StoryChapter</code> and <code>Action</code> stay the components they already are. <code>ExchangeLegend</code> reads the same “an individual is revealed” flag the 3D scene uses to show flares and lines.</p>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>Write <code>assignFungalIndividuals</code> and log one forest: each mushroom index in exactly one individual, each revealed fir listed on that individual.</li>
+    <li>Change the click path so the index is looked up in that list. Draw only that individual’s strands.</li>
+    <li>Replace the point web with one <code>&lt;Line worldUnits&gt;</code> per strand, including the links that end on the root collars.</li>
+    <li>Instance the trunk scan for <code>revealedTreeIndices</code> only. Tune <code>rootScale</code> and the X/Y shift until the collar meets the fir and the plate is wider than the trunk, not as wide as the crown.</li>
+    <li>Add the two chapters to <code>storyText.js</code>. Teach <code>StoryChapter</code> and <code>Action</code> to read the active chapter. Mount <code>ExchangeLegend</code> inside <code>StoryOverlay</code> for the revealed state.</li>
+    <li>Leave spores and the bark ribbon for their own passes. The point shader waits for the spore cloud.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>On paper, place mushrooms 1–5 and firs A–C as in the example. Click 2, then 4. Write which strands and which flares are visible after each click.</li>
+    <li>Find <code>buildNeighborStar</code> in <code>MyceliumNetwork</code>. Write the one condition it uses that the membership lookup will replace.</li>
+    <li>From the trunk scan’s scene bounds, say why the same <code>placement.scale</code> as the fir is the wrong size, and why a second <code>scatterObjectsOnTerrain</code> call is the wrong position.</li>
+    <li>Point at <code>StoryOverlay.jsx</code> and name the child that does not exist yet. Say which storyboard cards it owns.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What does a click return: a neighbor star, or an individual id?</li>
+    <li>Which placements does <code>RootFlares</code> share with <code>ScatteredFirTrees</code>, and which number does it choose for itself?</li>
+    <li>Why is the soil web a <code>&lt;Line&gt;</code> and the spore cloud still <code>&lt;points&gt;</code>?</li>
+    <li>Why is the exchange legend not a branch inside <code>Action</code>?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. Clicking mushroom 2 reveals:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>Every mushroom within the tier distance, including mushroom 4 if it is closest</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Individual A: mycelium A and firs A and B. Mushrooms 4 and 5 stay dark</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Every fly agaric, because they are one species</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Fir C, because a click always walks to the nearest fir</span></label>
+      <p class="explain">The index is a membership test. Distance built the patches earlier. It does not pick the network at click time.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. <code>RootFlares</code> is placed by:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>A new scatter with its own seed, then moved down</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>The same transform and the same scale as every fir, including firs outside the individual</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>The revealed firs’ placement position and rotation, with its own scale and a shift onto the trunk axis</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Parenting the scan mesh inside <code>fir_tree.glb</code></span></label>
+      <p class="explain">The scan is already below its origin, wider than the crown, and off-center. Only the revealed indexes are instanced.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. The soil mycelium and the spores use:</legend>
+      <label><input type="radio" name="q3" value="a"> <span><code>&lt;Line worldUnits&gt;</code> for each hypha, and <code>&lt;points&gt;</code> whose shader moves them from a cap</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>The current point web for both, with a different color</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>One ribbon up the trunk for both</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>A <code>&lt;Line&gt;</code> for each spore</span></label>
+      <p class="explain">A hypha is a path. A spore is a traveler. The bark arrows are a third drawing, later.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. <code>ExchangeLegend</code> belongs:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>Inside <code>Action</code>, as a second sentence</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Inside <code>StoryChapter</code>, as extra paragraphs</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>On the canvas, as a 3D label on every fir</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>As a sibling in <code>StoryOverlay</code>, visible once an individual is revealed</span></label>
+      <p class="explain">The chapter names the moment. The action names the gesture. The two cards are the science.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can walk the click on mushroom 2, then mushroom 4, without looking at the example</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can list the files that stay and the files this beat adds</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can say how the trunk scan shares a fir placement and where it must be shifted</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can name the three children <code>StoryOverlay</code> will have for the exchange</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You scored at least 3/4 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

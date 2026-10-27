@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The mushroom is the apple</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="../index.html">← All lessons</a>
+  <span class="spacer"></span>
+  <a href="one-species-many-individuals.html">Next: one species, several individuals →</a>
+</nav>
+<main>
+  <p class="meta">Network track · the organism under the fruiting body</p>
+  <h1>The mushroom is the apple</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> a mushroom is a fruit, not the whole fungus. The organism is an underground individual. Fly agaric is one species that partners with firs, and two mushrooms that look the same can still be two individuals whose hyphae never join.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>say what a mushroom is, and what the fungal individual is;</li>
+    <li>use the apple-tree picture without mixing up the fruit and the organism;</li>
+    <li>say why every mushroom in this scene can be a fly agaric and still belong to different individuals;</li>
+    <li>say where the sugar and mineral trade happens, and which part of that path is the tree’s own tissue.</li>
+  </ul>
+
+  <h2>1. The fruit and the organism</h2>
+  <p>An apple tree makes apples. The apple is how the tree spreads its seeds. Cutting an apple off the branch does not give you a second tree in your hand. The tree is the trunk, the branches, and the roots.</p>
+  <p>A fungus makes mushrooms the same way. The mushroom is the fruiting body. It exists to release spores. The organism is the mycelium: a web of threads called hyphae, mostly in the soil and on the roots. Several mushrooms can rise from one mycelium. They are several apples on one tree.</p>
+  <p>That underground organism is one <strong>fungal individual</strong>. Biologists also call a genetically distinct individual a genet. In this project, “individual” means that body: one connected mycelium, the mushrooms it fruits, and the fir roots it is plugged into.</p>
+
+  <h2>2. One species, many individuals</h2>
+  <p>Every mushroom in the scene is a fly agaric, <em>Amanita muscaria</em>. Fly agaric is ectomycorrhizal, and it does form partnerships with firs. One model, one material, one silhouette. The player cannot tell two individuals apart by looking at the caps.</p>
+  <p>The species is what they are. The individual is who is connected to whom. Two fly agarics standing next to each other can be two individuals. Their hyphae do not fuse. Network A stays network A. Network B stays network B. A forest floor is many of these patches overlapping in the soil, not one web that every mushroom joins.</p>
+  <p>A fir can host more than one fungal partner in a real forest. This scene keeps each fir with one individual, so a click has one answer: these mushrooms, this mycelium, these firs.</p>
+
+  <h2>3. What the partnership exchanges</h2>
+  <p>On a fir, the partnership is an ectomycorrhiza. The same hyphae that bear the mushrooms wrap the root tips and sit between the root cells. They do not climb the trunk as the highway for this trade.</p>
+  <ul>
+    <li>The fungus picks up water and minerals in the soil and passes them into the root.</li>
+    <li>The fir passes sugars from photosynthesis into the fungus at that same root.</li>
+    <li>Inside the trunk, water and minerals rise in the tree’s own wood. Sugars travel down toward the roots in the tree’s own tissue. The arrows on the bark are that part of the path. The glowing threads in the soil are the mycelium.</li>
+  </ul>
+  <p>Some mushrooms never make this trade. They are saprotrophs: their mycelium digests dead wood and litter. This scene uses fly agaric, so every connection you draw is the root partnership, not a decomposer’s web.</p>
+
+  <h2>4. A scene that matches that picture</h2>
+  <pre><code>species: fly agaric
+  every mushroom uses the same model
+
+individual A
+  mushrooms 1, 2, 3
+  mycelium A
+  firs A and B
+
+individual B
+  mushrooms 4, 5
+  mycelium B
+  fir C</code></pre>
+  <p>Mushrooms 1, 2, and 3 are three fruiting bodies of A. The threads between them are A’s mycelium. The threads that reach firs A and B are that same mycelium, ending at the roots. Mushrooms 4 and 5 never join those threads, even when one of them is the closest mushroom on the map.</p>
+  <p>The next lesson turns this picture into files, a click rule, the root model, and the overlay. Read <a href="one-species-many-individuals.html">One species, several individuals</a>.</p>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>In the apple picture, what is the apple, and what is the tree?</li>
+    <li>Why can two identical fly agarics stay in two networks?</li>
+    <li>Where does the sugar actually enter the fungus?</li>
+    <li>What are the arrows on the bark a picture of?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="b">
+      <legend>1. A mushroom is to its fungus as:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>A root is to a fir</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>An apple is to an apple tree</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>A trunk is to a branch</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Soil is to a root</span></label>
+      <p class="explain">The mushroom is the fruiting body. The mycelium is the organism that made it.</p>
+    </fieldset>
+
+    <fieldset data-answer="c">
+      <legend>2. Two fly agarics side by side:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>Must share one mycelium, because they are the same species</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Fuse their hyphae when they touch</span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Can be two individuals, with two mycelia that do not fuse</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>Are two species</span></label>
+      <p class="explain">The species is fly agaric for every cap. Membership decides the network.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. The mineral and sugar trade with a fir happens:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>At the roots, where this individual’s hyphae meet the root tips</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Along the bark, where the mycelium climbs the trunk</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Inside the cap, between the gills</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Only between two mushrooms, never at a tree</span></label>
+      <p class="explain">Ectomycorrhizal hyphae wrap the root tips. The trunk arrows are the tree moving what it received.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. Individual A includes:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>Every fly agaric in the scene, and every fir</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Mushrooms 1, 2, and 3 only. The firs belong to a different organism</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Firs A and B only. Mushrooms are a separate network</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>Mushrooms 1, 2, and 3, mycelium A, and firs A and B</span></label>
+      <p class="explain">One individual is the mycelium, the mushrooms it fruits, and the fir roots it colonizes.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can retell the apple picture in your own words</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say why identical fly agarics stay in separate networks</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can point to the root as the place of the trade, and to the trunk arrows as the tree’s own path</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You scored at least 3/4 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

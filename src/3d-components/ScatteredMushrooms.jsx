@@ -13,7 +13,6 @@ const BREATH_AMPLITUDE = 0.4
 const BREATH_SPEED = 2.5
 
 function InstancedMushroomPart({
-  expandableMushroomsIndices,
   geometry,
   material,
   localMatrix,
@@ -22,10 +21,6 @@ function InstancedMushroomPart({
   const meshRef = useRef(null)
   const dummy = useMemo(() => new Object3D(), [])
   const composed = useMemo(() => new Matrix4(), [])
-  const expandableSet = useMemo(
-    () => new Set(expandableMushroomsIndices),
-    [expandableMushroomsIndices],
-  )
   const boundsReadyRef = useRef(false)
 
   useFrame((state) => {
@@ -37,11 +32,10 @@ function InstancedMushroomPart({
     const time = state.clock.elapsedTime
 
     placements.forEach((placement, index) => {
-      const breath = expandableSet.has(index)
-        ? 1 +
-          BREATH_AMPLITUDE *
-            (0.5 + 0.5 * Math.sin(time * BREATH_SPEED + index * 1.73))
-        : 1
+      const breath =
+        1 +
+        BREATH_AMPLITUDE *
+          (0.5 + 0.5 * Math.sin(time * BREATH_SPEED + index * 1.73))
 
       dummy.position.set(placement.x, placement.elevation, -placement.y)
       dummy.rotation.set(0, placement.rotationY, 0)
@@ -109,7 +103,6 @@ function MushroomHitTargets({ placements, onSelect }) {
 }
 
 export default function ScatteredMushrooms({
-  expandableMushroomsIndices = [],
   onSelect,
   placements,
 }) {
@@ -147,7 +140,6 @@ export default function ScatteredMushrooms({
           material={part.material}
           localMatrix={part.localMatrix}
           placements={placements}
-          expandableMushroomsIndices={expandableMushroomsIndices}
         />
       ))}
       {onSelect && <MushroomHitTargets placements={placements} onSelect={onSelect} />}
