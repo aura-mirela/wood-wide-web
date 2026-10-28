@@ -22,7 +22,8 @@ export default function Terrain({
   segments,
   treeCount,
   mushroomCount,
-  bumpMap
+  bumpMap,
+  onCameraFocus,
 }) {
   const { isXs, isSm, isMd } = useBreakpoints()
   const myceliumMaxDistance = myceliumMaxDistanceForBreakpoints({ isXs, isSm, isMd })
@@ -62,9 +63,44 @@ export default function Terrain({
     [mushroomPlacements, treePlacements, myceliumMaxDistance],
   )
 
+  // Ids of individuals that have been clicked. Starts empty.
+  const [revealedIds, setRevealedIds] = useState([])
+
+  // gives an array of ids of the revealed fungal individuals (this is revealedIds)
+  // inds the individual whose mushroomIndices contain the clicked index, then appends that id.
+  const revealIndividual = (mushroomIndex) => {
+    const individual = fungalIndividuals.find((candidate) =>
+      candidate.mushroomIndices.includes(mushroomIndex),
+    )
+    if (!individual) {
+      return
+    }
+    setRevealedIds((current) =>
+      current.includes(individual.id) ? current : [...current, individual.id],
+    )
+    const placement = mushroomPlacements[mushroomIndex]
+    onCameraFocus?.({
+      x: placement.x,
+      y: placement.elevation,
+      z: -placement.y,
+    })
+  }
+
+  const restingMushroomIndices = useMemo(() => {
+    return new Set(
+      fungalIndividuals
+        .filter((individual) => revealedIds.includes(individual.id))
+        .flatMap((individual) => individual.mushroomIndices),
+    )
+  }, [fungalIndividuals, revealedIds])
+
+  // gives an array of root indices (which are the same as the tree/fir indices) of the revealed fungal individuals
+  // (this is rootIndices)
   const rootIndices = useMemo(
-    () => fungalIndividuals.flatMap((individual) => individual.rootIndices),
-    [fungalIndividuals],
+    () => fungalIndividuals
+      .filter((individual) => revealedIds.includes(individual.id))
+      .flatMap((individual) => individual.rootIndices),
+    [fungalIndividuals, revealedIds],
   )
 
   useEffect(() => () => geometry.dispose(), [geometry])
@@ -84,7 +120,11 @@ export default function Terrain({
       </mesh>
       <ScatteredFirTrees placements={treePlacements} />
       <ScatteredRootFlares placements={treePlacements} rootIndices={rootIndices} />
-      <ScatteredMushrooms placements={mushroomPlacements} />
+      <ScatteredMushrooms
+        placements={mushroomPlacements}
+        onSelect={revealIndividual}
+        restingMushroomIndices={restingMushroomIndices}
+      />
     </>
   )
 }

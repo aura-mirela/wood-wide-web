@@ -16,11 +16,12 @@
 /** 
  * Max distance between parts of the fungal individual - configuraion and funcion
 */
+// the smaller the max distance, the more fungal individuals are created
 export const MYCELIUM_MAX_DISTANCE_BY_TIER = {
-  xs: 3.2,
-  sm: 2.9,
-  md: 2.7,
-  desktop: 3.5,
+  xs: 2.2,
+  sm: 1.9,
+  md: 1.7,
+  desktop: 0.5,
 }
 
 export function myceliumMaxDistanceForBreakpoints({ isXs, isSm, isMd }) {

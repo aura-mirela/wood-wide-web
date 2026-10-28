@@ -17,6 +17,7 @@ function InstancedMushroomPart({
   material,
   localMatrix,
   placements,
+  restingMushroomIndices,
 }) {
   const meshRef = useRef(null)
   const dummy = useMemo(() => new Object3D(), [])
@@ -32,10 +33,11 @@ function InstancedMushroomPart({
     const time = state.clock.elapsedTime
 
     placements.forEach((placement, index) => {
-      const breath =
-        1 +
-        BREATH_AMPLITUDE *
-          (0.5 + 0.5 * Math.sin(time * BREATH_SPEED + index * 1.73))
+      const breath = restingMushroomIndices.has(index)
+        ? 1
+        : 1 +
+          BREATH_AMPLITUDE *
+            (0.5 + 0.5 * Math.sin(time * BREATH_SPEED + index * 1.73))
 
       dummy.position.set(placement.x, placement.elevation, -placement.y)
       dummy.rotation.set(0, placement.rotationY, 0)
@@ -105,6 +107,7 @@ function MushroomHitTargets({ placements, onSelect }) {
 export default function ScatteredMushrooms({
   onSelect,
   placements,
+  restingMushroomIndices,
 }) {
   const { scene } = useGLTF(MUSHROOM_MODEL_URL)
 
@@ -140,6 +143,7 @@ export default function ScatteredMushrooms({
           material={part.material}
           localMatrix={part.localMatrix}
           placements={placements}
+          restingMushroomIndices={restingMushroomIndices}
         />
       ))}
       {onSelect && <MushroomHitTargets placements={placements} onSelect={onSelect} />}

@@ -6,7 +6,7 @@ import Terrain from './3d-components/Terrain'
 import { useBreakpoints } from './breakpoints/useBreakpoints'
 import { getSceneTier } from './breakpoints/getSceneTier'
 
-export default function Experience() {
+export default function Experience({ cameraFocus, onCameraFocus }) {
 
   const { isXs, isSm, isMd, isPortrait } = useBreakpoints()
   const tier = getSceneTier({ isXs, isSm, isMd, isPortrait })
@@ -40,6 +40,8 @@ export default function Experience() {
           treeCount={tier.treeCount}
           mushroomCount={tier.mushroomCount}
           bumpMap={tier.bumpMap}
+          cameraFocus={cameraFocus}
+          onCameraFocus={onCameraFocus}
          />
       </Suspense>
     </Canvas>

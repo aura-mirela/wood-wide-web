@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Click, hover, and the way back</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="reveal-one-individual.html">← Reveal one individual</a>
+  <span class="spacer"></span>
+  <a href="../index.html">All lessons</a>
+</nav>
+<main>
+  <p class="meta">Network track · the click, the hover, and the camera button</p>
+  <h1>Click, hover, and the way back</h1>
+
+  <p class="episode"><strong>What this lesson records:</strong> the interaction we settled after reading the running scene. A click reveals one fungal individual. A hover releases spores from any cap. An up arrow sends the camera home and leaves the reveal in place. Read <a href="reveal-one-individual.html">Reveal one individual</a> for the strand geometry, then use this page for what that lesson does not yet say: the return button, the breath ease, and which spore system to keep.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>name the two pieces of state, and say which one the up arrow clears;</li>
+    <li>say what is on screen before the first click, and what that click adds at the same time;</li>
+    <li>say why the polar limits have to stay open while the camera travels home;</li>
+    <li>say why a hover uses the lesson 03 point cloud, and what the recycled spore pool was for.</li>
+  </ul>
+
+  <h2>Where the scene is</h2>
+  <p><code>App</code> draws one canvas and a click-through story overlay. The overlay’s chapter and action are still placeholders. The canvas is a horizon view of procedural ground, mask-scattered firs, and breathing fly agaric caps. Screen size picks the tier: fewer trees, fewer mushrooms, and no shadows on a phone.</p>
+  <p><code>assignFungalIndividuals</code> already groups the caps into individuals and stores each individual’s <code>myceliumStrands</code> and <code>rootIndices</code>. Nothing draws those strands yet. <code>Terrain</code> still concatenates every <code>rootIndices</code> and instances the root scan on all of them. That list is what turned the canvas black: on a medium screen it was 56 copies of a five-chunk scan, about 23 million triangles, and the frame never finished. <code>ScatteredMushrooms</code> can pick a cap, but the hit plane mounts only when <code>onSelect</code> is passed, and <code>Terrain</code> does not pass it.</p>
+
+  <h2>Two states, and they do not read each other</h2>
+  <table>
+    <tr><th>State</th><th>Lives in</th><th>What it drives</th></tr>
+    <tr><td><code>revealedIds</code></td><td><code>Terrain</code></td><td>Resting caps, <code>&lt;Line&gt;</code> strands, root flares. Grows when a cap is clicked. A second click appends the next individual. It does not replace the first.</td></tr>
+    <tr><td><code>cameraFocus</code></td><td><code>App</code>, read by <code>Experience</code></td><td>The orbit pose. The clicked cap’s world position, or <code>null</code> for home. The up arrow sets it back to <code>null</code>.</td></tr>
+  </table>
+  <p>Hover is a third, short-lived value: the mushroom index under the pointer, or nothing. It chooses which cap emits spores. It does not read <code>revealedIds</code>, and a click does not read it. A resting cap releases spores the same way a breathing one does.</p>
+
+  <h2>1. What one click does</h2>
+  <p>The individual already exists. The click looks the mushroom index up in <code>mushroomIndices</code> and appends that id if it is new. The same click reports the placement upward as <code>cameraFocus</code>. Clicking a cap that is already revealed does not add a second copy. It only moves the camera to that cap.</p>
+  <p>From the revealed records, derive three lists. Before the first click all three are empty.</p>
+  <ul>
+    <li><strong>Resting mushrooms.</strong> The union of their <code>mushroomIndices</code>. Their scale multiplier eases to <code>1</code>, which is the small end of the current pulse (<code>1</code> to <code>1.4</code>). Snapping from <code>1.4</code> to <code>1</code> pops, so ease it. Every other cap keeps the shared pulse: amplitude <code>0.4</code>, speed <code>2.5</code>, phase <code>index * 1.73</code>. Do not give a group its own speed. That would label it before the click.</li>
+    <li><strong>Strands.</strong> One drei <code>&lt;Line worldUnits&gt;</code> per <code>myceliumStrand</code>, width about <code>0.045</code>. Sample the ground with <code>getTerrainElevation</code>, lift about <code>0.07</code>, and add a small stable sideways bend. World position is <code>(x, elevation, -y)</code>. One warm color per individual id. Orange and cyan stay reserved for the later exchange.</li>
+    <li><strong>Root flares.</strong> That individual’s <code>rootIndices</code> only. <code>ScatteredRootFlares</code> already draws nothing when the list is empty, so the scan stays off the GPU until a reveal. One patch is a few firs. The scan is still about 300,000 vertices times five chunks times that fir count, so a patch that swallowed many trees can still hitch.</li>
+  </ul>
+  <p>Build in this order: empty the root list until a reveal, then the resting scale, then the lines, then the camera. The first step is what keeps the canvas from going black again.</p>
+
+  <h2>2. The camera, and the up arrow</h2>
+  <p>Both polar limits are <code>1.51</code>, which is the horizon. A little downward is a smaller polar angle, about <code>1.25</code>, with the orbit target on the clicked mushroom and the distance shortened to about <code>9</code>. From 16 units away, a tiny tilt still will not show the strands. Keep the azimuth. The camera slides so it still looks from the same compass direction, centered on the cap.</p>
+  <p>The return control is an upward arrow, rendered only while <code>cameraFocus</code> is set. The camera tilted down, and this control lifts it back: target <code>[-2, 1, -3.5]</code>, polar <code>1.51</code>, and the original distance. Clearing <code>cameraFocus</code> does not clear <code>revealedIds</code>. The lines, the resting caps, and the flares stay.</p>
+  <p>It is HTML, a sibling of the canvas, with <code>pointer-events: auto</code> and an accessible name such as “Return to the forest view.” The icon is <code>aria-hidden</code>. <code>.story-overlay</code> is <code>pointer-events: none</code>, so clicks pass through it. The <code>arrow</code> glyph in <code>iconMap.jsx</code> points down. That one means “move closer to the ground.” The return control is the same glyph turned up. A left arrow would read as “previous page.”</p>
+  <p>Two constraints fight the ease:</p>
+  <ul>
+    <li>An inline <code>target={[-2, 1, -3.5]}</code> is a new array every render. Drei applies it when the reference changes, which snaps the target home. Memoize the home target once, and let the rig write <code>controls.target</code> after mount.</li>
+    <li><code>controls.update()</code> clamps polar angle and distance. If the limits jump back to the horizon at the start of the return, the view snaps. While the pose is moving, open the limits across the span between home and the focused pose. When the angle and the distance have arrived, lock min and max to that pose again.</li>
+  </ul>
+
+  <h2>3. Hover releases the spore cloud you already planned</h2>
+  <p>Any cap can emit, whether or not it has been clicked. The pick on the invisible ground plane is the hover test. An index means that cap is emitting. <code>null</code>, or pointer out, means emitting stops. On a phone there is no hover, so the same tap that reveals an individual can also start one short burst.</p>
+  <p>The drawing is the cloud from <a href="../wood-wide-web/03-follow-the-spores.html">Lesson 03</a>. One <code>THREE.Points</code> object. Each point keeps <code>aSeed</code> and <code>aSize</code>. The vertex shader places it as a function of time: up from the gill ring, then a drift. The fragment shader is a soft disc, additive, <code>depthWrite: false</code>, fading in at birth and out at the end. A life uniform runs that life. The mycelium stays a <code>&lt;Line&gt;</code>. The old point shader moves onto this cloud. <code>raycast</code> stays null so the points never steal the click. <code>toneMapped: false</code> keeps the glow bright against the sunset HDR.</p>
+  <p>While the pointer is on a mushroom, that cloud’s emitter is that cap, about <code>0.18</code> above the placement, and the life uniform runs forward. Leave the cap and stop advancing the life. Spores already in the air finish the fade. A new hover either waits for that burst or replaces it.</p>
+  <p>A recycled pool, with <code>aOrigin</code> and <code>aBirth</code> written from JavaScript, is a different system. It only exists so a second cap can emit while the first puff is still in the air. One emitter uniform would make those living spores jump. This beat does not need two puffs at once, so it does not need the pool. The up arrow is not part of the spore cloud.</p>
+
+  <h2>Build steps</h2>
+  <ol>
+    <li>In <code>Terrain</code>, keep <code>revealedIds</code>. Pass <code>[]</code> for root flares until a click, then only the revealed individuals’ <code>rootIndices</code>.</li>
+    <li>Pass <code>onSelect</code> into <code>ScatteredMushrooms</code>. Append the matching individual id and call <code>onCameraFocus</code> with that cap’s world position.</li>
+    <li>Ease the breath of those mushroom indexes to resting scale <code>1</code>. Leave every other cap on the shared pulse.</li>
+    <li>Mount one <code>&lt;Line worldUnits&gt;</code> per revealed <code>myceliumStrand</code>.</li>
+    <li>Hold <code>cameraFocus</code> in <code>App</code>. Ease the orbit when it is set. Show the up arrow only then, and have the arrow set <code>cameraFocus</code> back to <code>null</code>.</li>
+    <li>Open the polar and distance limits across the whole ease, including the return, and lock them when the pose arrives. Memoize the home target.</li>
+    <li>On hover, run the lesson 03 point cloud from that cap. Do not add a second particle system.</li>
+  </ol>
+
+  <h2>Exercises</h2>
+  <ol>
+    <li>Click mushroom 2, then the up arrow, then mushroom 4. Write what is revealed after each step, and where the camera is.</li>
+    <li>Name the two props that would snap the camera home even though the rig is lerping.</li>
+    <li>Hover a resting cap, then a breathing one. Say what is the same about the spores, and what the click changed that the hover did not.</li>
+    <li>Say which spore bug the <code>aOrigin</code> pool was meant to prevent, and why this beat can skip it.</li>
+  </ol>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>What does the up arrow clear, and what does it leave on screen?</li>
+    <li>Why are the root flares absent before the first click?</li>
+    <li>Why must the polar limits stay open during the return, not only during the move down?</li>
+    <li>A hover starts spores. Which file’s design draws them, and what does the hover itself change?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. The up arrow:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>Clears <code>revealedIds</code> and sends the camera home</span></label>
+      <label><input type="radio" name="q1" value="b"> <span>Hides the lines but leaves the root flares</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>Sets <code>cameraFocus</code> to <code>null</code>. The lines, flares, and resting caps stay</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Stops the spore cloud, because the arrow belongs to that system</span></label>
+      <p class="explain">The reveal lives in <code>Terrain</code>. The arrow only clears the camera pose held in <code>App</code>.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>2. Root flares are instanced:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>For every fir, as soon as the terrain loads</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Only for <code>rootIndices</code> of individuals whose id is in <code>revealedIds</code></span></label>
+      <label><input type="radio" name="q2" value="c"> <span>Under the hovered mushroom, for as long as the pointer stays there</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>After the camera finishes easing, for the whole forest</span></label>
+      <p class="explain">An empty list draws nothing. That is what keeps the heavy scan off the GPU until a click.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. During the return to the horizon, the polar limits:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Stay open across the span between the focused pose and home, then lock when the camera arrives</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Jump back to <code>1.51</code> on the same frame the arrow is pressed</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Stay at the focused angle forever, so the user can tilt at any time</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Are removed, because <code>controls.update()</code> does not clamp</span></label>
+      <p class="explain"><code>controls.update()</code> clamps. Closing the limits at the start of the return snaps the view instead of easing it.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. Spores on hover are:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>A new pool that writes <code>aOrigin</code> and <code>aBirth</code> for every spawn</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>One <code>&lt;Line&gt;</code> per spore, using the mycelium color</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Released only from caps whose individual has been revealed</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>The lesson 03 <code>Points</code> cloud, with its emitter set to the hovered cap</span></label>
+      <p class="explain">The hover is the trigger. The drawing stays one point cloud: birth, drift, and fade in the shader. The pool was a second system, for two puffs in the air at once.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can separate <code>revealedIds</code>, <code>cameraFocus</code>, and the hovered index</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say what one click adds, and what the up arrow leaves behind</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can say why the root list is empty before the first click</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can say why the hover uses the lesson 03 cloud and not a second particle system</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You scored at least 3/4 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>
