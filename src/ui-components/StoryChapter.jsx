@@ -1,8 +1,8 @@
-export default function StoryChapter() {
+export default function StoryChapter({ title, body }) {
   return (
     <div className="story-chapter">
-      <h1>Story Chapter</h1>
-      <div className="story-chapter-content">Story Chapter Content</div>
+      <h1>{title}</h1>
+      <div className="story-chapter-content">{body}</div>
     </div>
   )
 }

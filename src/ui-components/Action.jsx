@@ -1,7 +1,12 @@
-export default function Action() {
+export default function Action({ icon, label }) {
+  if (!label) {
+    return null
+  }
+
   return (
     <div className="action">
-      <div className="action-content">Action Content</div>
+      {icon}
+      <div className="action-content">{label}</div>
     </div>
   )
 }

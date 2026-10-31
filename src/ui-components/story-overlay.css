@@ -2,4 +2,49 @@
     position: fixed;
     inset: 0;
     pointer-events: none;
+    border: 5px solid rgb(237 242 252 / 65%);;
+    border-radius: 20px;
+    width: min(50%, 36rem);
+    height: min(30%, 36rem);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    margin: auto;
+    padding-bottom: 10px;
+    color: rgb(237 242 252 / 85%);
+    background-color: rgb(237 242 252 / 10%);
+}
+.story-chapter h1 {
+    font-size: min(22px, 24px);
+}
+.story-chapter-content {
+    font-size: min(17px, 20px);
+}
+.action-content {
+    font-size: min(15px, 17px);
+}
+.next-button,
+.previous-button {
+    position: absolute;
+    z-index: 1;
+    top: 12px;
+    pointer-events: auto;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    color: rgb(237 242 252 / 85%);
+    background: transparent;
+    border: 1px solid rgb(237 242 252 / 55%);
+    border-radius: 999px;
+    cursor: pointer;
+}
+.next-button {
+    right: 12px;
+}
+.previous-button {
+    left: 12px;
 }

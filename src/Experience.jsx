@@ -1,7 +1,6 @@
 import { Canvas } from '@react-three/fiber'
 import { Suspense } from 'react'
 import { OrbitControls } from '@react-three/drei'
-import SceneEnvironment from './SceneEnvironment'
 import Moon, { MOON_POSITION } from './3d-components/Moon'
 import Stars from './3d-components/Stars'
 import SceneControls from './SceneControls'

@@ -4,7 +4,6 @@ export const chapters = [
     title: 'Enter the forest',
     body: 'The forest is alive — and so is the fungi beneath your feet. Look around.',
     action: {
-      icon: 'cursor',
       label: 'Move your cursor or swipe to look around.',
     },
   },
