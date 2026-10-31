@@ -3,9 +3,10 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Matrix4, Object3D } from 'three'
 
 const TREE_MODEL_URL = '/models/fir_tree.glb'
+const ROOTED_FIR_SCALE = 1.2
 
 // Function that creats an instance mesh for the tree part (part = trunk and foliage)
-function InstancedTreePart({ geometry, material, localMatrix, placements }) {
+function InstancedTreePart({ geometry, material, localMatrix, placements, rootedFirIndices }) {
   const meshRef = useRef(null)
 
   useLayoutEffect(() => {
@@ -16,11 +17,13 @@ function InstancedTreePart({ geometry, material, localMatrix, placements }) {
 
     const dummy = new Object3D()
     const composed = new Matrix4()
+    const rooted = new Set(rootedFirIndices)
 
     placements.forEach((placement, index) => {
+      const scale = placement.scale * (rooted.has(index) ? ROOTED_FIR_SCALE : 1)
       dummy.position.set(placement.x, placement.elevation, -placement.y)
       dummy.rotation.set(0, placement.rotationY, 0)
-      dummy.scale.setScalar(placement.scale)
+      dummy.scale.set(scale, scale, scale)
       dummy.updateMatrix()
       composed.multiplyMatrices(dummy.matrix, localMatrix)
       mesh.setMatrixAt(index, composed)
@@ -28,7 +31,7 @@ function InstancedTreePart({ geometry, material, localMatrix, placements }) {
 
     mesh.instanceMatrix.needsUpdate = true
     mesh.computeBoundingSphere()
-  }, [localMatrix, placements])
+  }, [localMatrix, placements, rootedFirIndices])
 
   return (
     <instancedMesh
@@ -41,7 +44,7 @@ function InstancedTreePart({ geometry, material, localMatrix, placements }) {
   )
 }
 
-export default function ScatteredFirTrees({ placements }) {
+export default function ScatteredFirTrees({ placements, rootedFirIndices = [] }) {
   const { scene } = useGLTF(TREE_MODEL_URL)
 
   // creates an array of plain records (geometry, material, localMatrix), one per mesh in the GLB and caches it
@@ -79,6 +82,7 @@ export default function ScatteredFirTrees({ placements }) {
       material={part.material}
       localMatrix={part.localMatrix}
       placements={placements}
+      rootedFirIndices={rootedFirIndices}
     />
   ))
 }

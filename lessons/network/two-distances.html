@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two distances, one click</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<nav class="lesson-nav">
+  <a href="reveal-one-individual.html">← Reveal one individual</a>
+  <span class="spacer"></span>
+  <a href="click-hover-and-return.html">Click, hover, and the way back →</a>
+</nav>
+<main>
+  <p class="meta">Network track · why a click listed every fir, then no firs at all</p>
+  <h1>Two distances, one click</h1>
+
+  <p class="episode"><strong>What this lesson explains:</strong> the click log and the fir scale that are in the scene now, and why one join distance could not both keep individuals small and still reach a trunk. The code is already written. This page is how to read it.</p>
+
+  <h2>Goal</h2>
+  <p>After this lesson you should be able to:</p>
+  <ul>
+    <li>read one console line and say which mushrooms, which firs, and which root flares that click revealed;</li>
+    <li>say why <code>firs [] have roots []</code> is a stored empty list, and why the same line once printed almost every fir index;</li>
+    <li>name the two desktop distances and which loop uses each one;</li>
+    <li>say why the grown firs are 1.2 on x, y, and z, and why a trunk with no square plate can still be in the log.</li>
+  </ul>
+
+  <h2>What you already have</h2>
+  <table>
+    <tr><th>File</th><th>What it does on a click</th></tr>
+    <tr><td><code>src/lib/assignFungalIndividuals.js</code></td><td>Builds the individuals once, on load. Mushrooms group at one distance. Firs join at another.</td></tr>
+    <tr><td><code>src/3d-components/Terrain.jsx</code></td><td>Looks up the clicked mushroom’s individual, logs its three lists, and appends that id to <code>revealedIds</code>.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredFirTrees.jsx</code></td><td>Draws every fir. The indexes in <code>rootedFirIndices</code> are scaled by 1.2 on all three axes.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredRootFlares.jsx</code></td><td>Instances the trunk scan for those same indexes. An empty list draws nothing.</td></tr>
+    <tr><td><code>src/3d-components/ScatteredMushrooms.jsx</code></td><td>Caps whose indexes are in <code>restingMushroomIndices</code> hold still. The others keep the shared breath.</td></tr>
+  </table>
+
+  <h2>1. One distance did both jobs, and neither number worked</h2>
+  <p>Caps and firs are scattered from two masks. Caps sit near other caps. A trunk is often farther from the nearest cap than two caps are from each other. The ground distance is <code>hypot(a.x - b.x, a.y - b.y)</code>. Placement <code>y</code> is the ground axis. The scene draws it as world <code>z = -y</code>.</p>
+  <p>While both tests used the same number, the desktop forest had two bad settings:</p>
+  <table>
+    <tr><th>Desktop distance</th><th>What one click did</th></tr>
+    <tr><td><code>0.5</code></td><td>Twenty-five clicks logged <code>firs [] have roots []</code>. The caps formed small individuals. Almost no trunk was inside 0.5 of any of them, so nothing was stored and nothing grew.</td></tr>
+    <tr><td><code>2</code></td><td>One click logged firs 0–79 except 34 and 64. Every mushroom in that chain stopped breathing, and every listed fir grew. A walk of gaps no larger than 2 crossed the whole forest, so those caps were one individual, and almost every trunk was within 2 of some cap in it.</td></tr>
+  </table>
+  <p>An empty JavaScript array becomes a blank inside a template string. <code>`firs ${[]}`</code> prints <code>firs </code>, which looks like the indexes were dropped. <code>JSON.stringify</code> prints <code>[]</code>, so an empty list and a missing list are different.</p>
+
+  <h2>2. Caps stay close. Firs may stand farther</h2>
+  <p><code>MYCELIUM_MAX_DISTANCE_BY_TIER</code> is the gap that still joins two mushrooms. <code>FIR_MAX_DISTANCE_BY_TIER</code> is the gap that still joins a fir to its nearest mushroom. On the smaller tiers the two tables match. Only desktop splits them: caps at <code>1</code>, firs at <code>1.5</code>.</p>
+  <table>
+    <tr><th>Tier</th><th>Mushroom gap</th><th>Fir gap</th></tr>
+    <tr><td>xs</td><td>2.2</td><td>2.2</td></tr>
+    <tr><td>sm</td><td>1.9</td><td>1.9</td></tr>
+    <tr><td>md</td><td>1.7</td><td>1.7</td></tr>
+    <tr><td>desktop</td><td>1</td><td>1.5</td></tr>
+  </table>
+  <p><code>Terrain</code> reads both from the breakpoint flags and passes them into <code>assignFungalIndividuals</code>. The mushroom walk still uses <code>maxDistance</code>. The fir loop uses <code>firMaxDistance</code>, which defaults to <code>maxDistance</code> when the caller does not pass it.</p>
+  <pre><code>collect mushroom groups with maxDistance
+
+for each fir:
+  nearest cap = the closest mushroom whose ground gap is &lt;= firMaxDistance
+  if there is no such cap:
+    leave this fir out of every individual
+  else:
+    push this fir index onto that cap's individual
+      treeIndices and rootIndices
+    push one strand, mushroom → root</code></pre>
+  <p>A fir is stored once, on the individual of its nearest cap inside the fir gap. Clicking a farther cap does not list that fir. <code>treeIndices</code> and <code>rootIndices</code> receive the same index in the same loop, then both are sorted. They are two names for one list: the tree, and the flare under it.</p>
+
+  <h2>3. The click prints the record. It does not search again</h2>
+  <p><code>revealIndividual</code> finds the individual whose <code>mushroomIndices</code> contain the clicked index. If that lookup fails, it returns and prints nothing. If it succeeds, it prints the three lists already on that record, then appends the id when it is not already revealed.</p>
+  <pre><code>firs [72] have roots [72] from mushrooms [4,11]
+firs [] have roots [] from mushrooms [18]</code></pre>
+  <p>The first line is an individual with caps 4 and 11 and fir 72. The second line is a different individual. Cap 18 was found. No fir was stored on it, because none is within the fir gap of its caps. The brackets are the proof that the list was read. A blank between the words was the old empty-array print.</p>
+  <p>The same id drives the three visible changes. <code>restingMushroomIndices</code> is the mushroom indexes of every revealed individual, so those caps hold still. <code>rootIndices</code> is the fir indexes, passed both to <code>ScatteredRootFlares</code> and to <code>ScatteredFirTrees</code> as <code>rootedFirIndices</code>. A second click appends the next id. The first individual’s caps stay still, and its firs stay large.</p>
+
+  <h2>4. The grown fir is the debug. The plate under the soil is a different question</h2>
+  <p><code>ScatteredFirTrees</code> multiplies <code>placement.scale</code> by <code>1.2</code> when the instance index is in <code>rootedFirIndices</code>, and writes that number on x, y, and z. Every other fir keeps <code>placement.scale</code> on all three axes. The layout effect depends on <code>rootedFirIndices</code>, so the matrices update when a click adds indexes.</p>
+  <p>The root scan is a separate mesh. Its wide plate hangs below the collar, and <code>ROOT_LIFT</code> is only <code>0.03</code>. From the horizon lock, a fir that is in the log can still show no square on the soil, because the terrain triangle covers the collar. The scale is how you see that the index was stored. The plate is how you see that the scan cleared the ground.</p>
+
+  <h2>Checkpoint</h2>
+  <ul>
+    <li>A click prints <code>firs [] have roots [] from mushrooms [18]</code>. Was the individual missing, or did it have no fir?</li>
+    <li>Why did distance <code>2</code> put almost every fir on one click, while distance <code>0.5</code> put none?</li>
+    <li>Which desktop number groups the caps, and which number lets a fir join?</li>
+    <li>Fir 72 is already on the first individual. You click a different cap. When does 72 appear in the new line?</li>
+  </ul>
+
+  <h2>Quiz</h2>
+  <form class="quiz">
+    <fieldset data-answer="c">
+      <legend>1. <code>firs [] have roots []</code> means:</legend>
+      <label><input type="radio" name="q1" value="a"> <span>The click missed, so the log printed nothing</span></label>
+      <label><input type="radio" name="q1" value="b"> <span><code>JSON.stringify</code> dropped the indexes</span></label>
+      <label><input type="radio" name="q1" value="c"> <span>The individual was found, and no fir was stored on it</span></label>
+      <label><input type="radio" name="q1" value="d"> <span>Every fir in the forest is revealed</span></label>
+      <p class="explain">The lookup succeeded, which is why a line printed. Both stored lists are empty. <code>[]</code> is that empty list made visible.</p>
+    </fieldset>
+
+    <fieldset data-answer="b">
+      <legend>2. At desktop distance 2, one click grew almost every fir because:</legend>
+      <label><input type="radio" name="q2" value="a"> <span>The scale ran on every instance, ignoring the indexes</span></label>
+      <label><input type="radio" name="q2" value="b"> <span>Mushroom gaps of 2 chained into one individual, and almost every fir was within 2 of it</span></label>
+      <label><input type="radio" name="q2" value="c"> <span><code>rootIndices</code> is always a copy of every tree placement</span></label>
+      <label><input type="radio" name="q2" value="d"> <span>The log printed the placement count, not the stored indexes</span></label>
+      <p class="explain">Membership is a walk. A chain of gaps no larger than the mushroom distance is one individual. The firs within the fir distance of that chain were stored on it.</p>
+    </fieldset>
+
+    <fieldset data-answer="a">
+      <legend>3. On desktop, the two numbers are:</legend>
+      <label><input type="radio" name="q3" value="a"> <span>Mushrooms group at 1. A fir joins its nearest cap out to 1.5</span></label>
+      <label><input type="radio" name="q3" value="b"> <span>Both tests use 1.5</span></label>
+      <label><input type="radio" name="q3" value="c"> <span>Firs group with each other at 1, and mushrooms join a fir at 1.5</span></label>
+      <label><input type="radio" name="q3" value="d"> <span>Desktop still uses 0.5 for both</span></label>
+      <p class="explain"><code>MYCELIUM_MAX_DISTANCE_BY_TIER.desktop</code> is 1. <code>FIR_MAX_DISTANCE_BY_TIER.desktop</code> is 1.5. The smaller tiers use one number for both.</p>
+    </fieldset>
+
+    <fieldset data-answer="d">
+      <legend>4. A fir grows by 1.2 when:</legend>
+      <label><input type="radio" name="q4" value="a"> <span>It is the nearest fir in the whole forest</span></label>
+      <label><input type="radio" name="q4" value="b"> <span>Its root plate is visible above the soil</span></label>
+      <label><input type="radio" name="q4" value="c"> <span>Any click happens, because the scale is on the shared mesh</span></label>
+      <label><input type="radio" name="q4" value="d"> <span>Its index is in <code>rootedFirIndices</code>, the revealed individuals’ fir list</span></label>
+      <p class="explain">The 1.2 is applied on x, y, and z inside <code>ScatteredFirTrees</code>. The plate under the soil is the scan, not the scale.</p>
+    </fieldset>
+
+    <button type="submit">Check answers</button><span class="score"></span>
+  </form>
+
+  <h2>Done when</h2>
+  <ul class="checklist">
+    <li><label><input type="checkbox" data-persist="done-1"> <span>You can read one console line and name the caps, the firs, and the flares</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-2"> <span>You can say what distance 0.5 hid, and what distance 2 joined</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-3"> <span>You can point at the desktop mushroom gap and the desktop fir gap</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-4"> <span>You can say why a logged fir can still have no visible root plate</span></label></li>
+    <li><label><input type="checkbox" data-persist="done-5"> <span>You scored at least 3/4 on the quiz</span></label></li>
+  </ul>
+</main>
+<script src="../lessons.js"></script>
+</body>
+</html>

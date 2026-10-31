@@ -2,7 +2,7 @@ import { Environment } from "@react-three/drei"
 
 export default function SceneEnvironment() {
 
-    const  SKY_HDR_URL = '/textures/env-maps/rosendal_park_sunset_puresky_1k.hdr'
+    const  SKY_HDR_URL = '/textures/env-maps/NightSkyHDRI003_1K_HDR.hdr'
 
     return (
         <>

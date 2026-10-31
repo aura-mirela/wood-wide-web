@@ -21,7 +21,17 @@ export const MYCELIUM_MAX_DISTANCE_BY_TIER = {
   xs: 2.2,
   sm: 1.9,
   md: 1.7,
-  desktop: 0.5,
+  desktop: 1.0,
+}
+
+// Firs are scattered from a different mask, so the gap from a cap to the
+// nearest trunk is larger than the gap between caps. Desktop mushroom groups
+// stay at 1. A fir can still join the nearest of those caps out to this distance.
+export const FIR_MAX_DISTANCE_BY_TIER = {
+  xs: 2.2,
+  sm: 1.9,
+  md: 1.7,
+  desktop: 1.5,
 }
 
 export function myceliumMaxDistanceForBreakpoints({ isXs, isSm, isMd }) {
@@ -38,6 +48,22 @@ export function myceliumMaxDistanceForBreakpoints({ isXs, isSm, isMd }) {
   }
 
   return MYCELIUM_MAX_DISTANCE_BY_TIER.desktop
+}
+
+export function firMaxDistanceForBreakpoints({ isXs, isSm, isMd }) {
+  if (isXs) {
+    return FIR_MAX_DISTANCE_BY_TIER.xs
+  }
+
+  if (isSm) {
+    return FIR_MAX_DISTANCE_BY_TIER.sm
+  }
+
+  if (isMd) {
+    return FIR_MAX_DISTANCE_BY_TIER.md
+  }
+
+  return FIR_MAX_DISTANCE_BY_TIER.desktop
 }
 
 /**
@@ -128,7 +154,8 @@ function mushroomStrands(mushroomPlacements, mushroomIndices, maxDistance) {
  * Assigns the fungal individuals to the tree placements based on the max distance
  * @param {*} mushroomPlacements 
  * @param {*} treePlacements 
- * @param {*} maxDistance 
+ * @param {*} maxDistance gap that still joins two mushrooms
+ * @param {*} firMaxDistance gap that still joins a fir to its nearest mushroom
  * @returns {Array<{
  *      id: number,
  *      mushroomIndices: Array<number>,
@@ -141,6 +168,7 @@ export function assignFungalIndividuals(
   mushroomPlacements,
   treePlacements,
   maxDistance,
+  firMaxDistance = maxDistance,
 ) {
   if (
     mushroomPlacements.length === 0
@@ -170,7 +198,7 @@ export function assignFungalIndividuals(
     for (let mushroomIndex = 0; mushroomIndex < mushroomPlacements.length; mushroomIndex++) {
       const mushroomFirDistance = distanceXY(mushroomPlacements[mushroomIndex], fir)
 
-      if (mushroomFirDistance > maxDistance) {
+      if (mushroomFirDistance > firMaxDistance) {
         continue
       }
 

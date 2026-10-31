@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useBreakpoints } from '../breakpoints/useBreakpoints'
 import {
   assignFungalIndividuals,
+  firMaxDistanceForBreakpoints,
   myceliumMaxDistanceForBreakpoints,
 } from '../lib/assignFungalIndividuals'
 import { createTerrainGeometry } from '../lib/createTerrainGeometry'
 import { scatterObjectsOnTerrain } from '../lib/scatterObjectsOnTerrain'
 import TerrainPBRMaterial from '../materials/TerrainPBRMaterial'
+// import FungalLines from './FungalLines'
 import ScatteredFirTrees from './ScatteredFirTrees'
 import ScatteredMushrooms from './ScatteredMushrooms'
 import ScatteredRootFlares from './ScatteredRootFlares'
@@ -27,6 +29,7 @@ export default function Terrain({
 }) {
   const { isXs, isSm, isMd } = useBreakpoints()
   const myceliumMaxDistance = myceliumMaxDistanceForBreakpoints({ isXs, isSm, isMd })
+  const firMaxDistance = firMaxDistanceForBreakpoints({ isXs, isSm, isMd })
   
   const [treeScatterMask, mushroomScatterMask] = useTexture([
     TREE_SCATTER_MASK_URL,
@@ -59,15 +62,17 @@ export default function Terrain({
       mushroomPlacements,
       treePlacements,
       myceliumMaxDistance,
+      firMaxDistance,
     ),
-    [mushroomPlacements, treePlacements, myceliumMaxDistance],
+    [mushroomPlacements, treePlacements, myceliumMaxDistance, firMaxDistance],
   )
 
   // Ids of individuals that have been clicked. Starts empty.
   const [revealedIds, setRevealedIds] = useState([])
+  // const [connectionHubs, setConnectionHubs] = useState([])
 
   // gives an array of ids of the revealed fungal individuals (this is revealedIds)
-  // inds the individual whose mushroomIndices contain the clicked index, then appends that id.
+  // finds the individual whose mushroomIndices contain the clicked index, then appends that id.
   const revealIndividual = (mushroomIndex) => {
     const individual = fungalIndividuals.find((candidate) =>
       candidate.mushroomIndices.includes(mushroomIndex),
@@ -75,9 +80,17 @@ export default function Terrain({
     if (!individual) {
       return
     }
+    console.log(
+      `firs ${JSON.stringify(individual.treeIndices)} have roots ${JSON.stringify(individual.rootIndices)} from mushrooms ${JSON.stringify(individual.mushroomIndices)}`,
+    )
     setRevealedIds((current) =>
       current.includes(individual.id) ? current : [...current, individual.id],
     )
+    // setConnectionHubs((current) => (
+    //   current.some((hub) => hub.individualId === individual.id)
+    //     ? current
+    //     : [...current, { individualId: individual.id, mushroomIndex }]
+    // ))
     const placement = mushroomPlacements[mushroomIndex]
     onCameraFocus?.({
       x: placement.x,
@@ -118,13 +131,19 @@ export default function Terrain({
          bumpMap={bumpMap}
         />
       </mesh>
-      <ScatteredFirTrees placements={treePlacements} />
+      <ScatteredFirTrees placements={treePlacements} rootedFirIndices={rootIndices} />
       <ScatteredRootFlares placements={treePlacements} rootIndices={rootIndices} />
       <ScatteredMushrooms
         placements={mushroomPlacements}
         onSelect={revealIndividual}
         restingMushroomIndices={restingMushroomIndices}
       />
+      {/* <FungalLines
+        hubs={connectionHubs}
+        fungalIndividuals={fungalIndividuals}
+        mushroomPlacements={mushroomPlacements}
+        treePlacements={treePlacements}
+      /> */}
     </>
   )
 }

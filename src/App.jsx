@@ -9,7 +9,7 @@ function App() {
   return (
     <>
       <Experience cameraFocus={cameraFocus} onCameraFocus={setCameraFocus} />
-      <StoryOverlay />
+      {/* <StoryOverlay /> */}
     </>
   )
 }

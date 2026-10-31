@@ -2,9 +2,23 @@ import { Canvas } from '@react-three/fiber'
 import { Suspense } from 'react'
 import { OrbitControls } from '@react-three/drei'
 import SceneEnvironment from './SceneEnvironment'
+import Moon, { MOON_POSITION } from './3d-components/Moon'
+import Stars from './3d-components/Stars'
+import SceneControls from './SceneControls'
 import Terrain from './3d-components/Terrain'
 import { useBreakpoints } from './breakpoints/useBreakpoints'
 import { getSceneTier } from './breakpoints/getSceneTier'
+
+const MOON_LIGHT_DISTANCE = 5
+
+function lightPositionFromMoon(moonPosition, distance) {
+  const [x, y, z] = moonPosition
+  const horizontal = Math.hypot(x, z) || 1
+  const scale = distance / horizontal
+  return [x * scale, y, z * scale]
+}
+
+const moonLightPosition = lightPositionFromMoon(MOON_POSITION, MOON_LIGHT_DISTANCE)
 
 export default function Experience({ cameraFocus, onCameraFocus }) {
 
@@ -17,6 +31,7 @@ export default function Experience({ cameraFocus, onCameraFocus }) {
       camera={tier.camera}
       shadows={tier.shadows}
     >
+      <SceneControls lightPosition={moonLightPosition} castShadow={tier.shadows} />
       <OrbitControls
         target={[-2, 1, -3.5]}
         minAzimuthAngle={0.13 - 0.2}
@@ -26,15 +41,10 @@ export default function Experience({ cameraFocus, onCameraFocus }) {
         minDistance={tier.minDistance}
         maxDistance={tier.maxDistance}
       />
-      <SceneEnvironment />
 
-      <directionalLight
-        color="#ff4f25"
-        intensity={0.2}
-        position={[0.56, 0.02, -0.82]}
-        castShadow={tier.shadows}
-      />
+      <Stars />
       <Suspense fallback={null}>
+        <Moon />
         <Terrain
           segments={tier.segments}
           treeCount={tier.treeCount}

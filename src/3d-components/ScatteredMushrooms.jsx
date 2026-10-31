@@ -11,6 +11,7 @@ const MUSHROOM_BASE_SCALE = 0.0035
 const MUSHROOM_PICK_MAX_DISTANCE_PX = 40
 const BREATH_AMPLITUDE = 0.4
 const BREATH_SPEED = 2.5
+const RESTING_MUSHROOM_INCREASE_FACTOR = 1
 
 function InstancedMushroomPart({
   geometry,
@@ -34,7 +35,7 @@ function InstancedMushroomPart({
 
     placements.forEach((placement, index) => {
       const breath = restingMushroomIndices.has(index)
-        ? 1
+        ? 1 + BREATH_AMPLITUDE * RESTING_MUSHROOM_INCREASE_FACTOR
         : 1 +
           BREATH_AMPLITUDE *
             (0.5 + 0.5 * Math.sin(time * BREATH_SPEED + index * 1.73))
