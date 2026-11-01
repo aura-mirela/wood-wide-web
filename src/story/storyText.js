@@ -27,7 +27,7 @@ export const chapters = [
   {
     id: 'enter-the-forest',
     title: 'Enter the forest',
-    body: 'The forest is alive — and so are the fungi beneath your feet. Look around.',
+    body: 'The forest is alive — and so are the fungi and firs. Look around.',
     action: {
       label: 'Move your cursor or swipe to look around.',
     },
