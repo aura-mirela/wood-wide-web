@@ -10,7 +10,7 @@ import {
 import { createTerrainGeometry } from '../lib/createTerrainGeometry'
 import { scatterObjectsOnTerrain } from '../lib/scatterObjectsOnTerrain'
 import TerrainPBRMaterial from '../materials/TerrainPBRMaterial'
-// import FungalLines from './FungalLines'
+import FungalLines from './FungalLines'
 import ScatteredFirTrees from './ScatteredFirTrees'
 import ScatteredMushrooms from './ScatteredMushrooms'
 import ScatteredRootFlares from './ScatteredRootFlares'
@@ -69,7 +69,7 @@ export default function Terrain({
 
   // Ids of individuals that have been clicked. Starts empty.
   const [revealedIds, setRevealedIds] = useState([])
-  // const [connectionHubs, setConnectionHubs] = useState([])
+  const [connectionHubs, setConnectionHubs] = useState([])
 
   // gives an array of ids of the revealed fungal individuals (this is revealedIds)
   // finds the individual whose mushroomIndices contain the clicked index, then appends that id.
@@ -86,11 +86,11 @@ export default function Terrain({
     setRevealedIds((current) =>
       current.includes(individual.id) ? current : [...current, individual.id],
     )
-    // setConnectionHubs((current) => (
-    //   current.some((hub) => hub.individualId === individual.id)
-    //     ? current
-    //     : [...current, { individualId: individual.id, mushroomIndex }]
-    // ))
+    setConnectionHubs((current) => (
+      current.some((hub) => hub.individualId === individual.id)
+        ? current
+        : [...current, { individualId: individual.id, mushroomIndex }]
+    ))
     const placement = mushroomPlacements[mushroomIndex]
     onCameraFocus?.({
       x: placement.x,
@@ -138,12 +138,12 @@ export default function Terrain({
         onSelect={revealIndividual}
         restingMushroomIndices={restingMushroomIndices}
       />
-      {/* <FungalLines
+      <FungalLines
         hubs={connectionHubs}
         fungalIndividuals={fungalIndividuals}
         mushroomPlacements={mushroomPlacements}
         treePlacements={treePlacements}
-      /> */}
+      />
     </>
   )
 }

@@ -1,4 +1,3 @@
-/*
 import { Line } from '@react-three/drei'
 import { useMemo } from 'react'
 
@@ -65,4 +64,3 @@ export default function FungalLines({
     </>
   )
 }
-*/
