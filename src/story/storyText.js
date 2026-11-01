@@ -86,7 +86,7 @@ Resin and paper pulp`,
   },
   {
     id: 'reflection',
-    title: 'Reflection',
+    title: 'Reflect on the World Wide Web',
     body: "The forest is more than what you see. It's a network of life, connection and constant exchange. Look around again and take in the full picture",
     action: {
       icon: 'eye',
