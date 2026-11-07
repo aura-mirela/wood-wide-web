@@ -23,7 +23,7 @@
 @media (max-width: 768px) {
     .story-overlay {
         width: 85%;
-        top: 40%;
+        top: 50%;
         color: hsl(var(--moonlight) / 100%);
     }
 }
