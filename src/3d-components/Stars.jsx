@@ -1,12 +1,12 @@
 import { useThree } from '@react-three/fiber'
-import { useEffect, useMemo } from 'react'
-import { BufferAttribute, BufferGeometry } from 'three'
+import { useEffect, useLayoutEffect, useMemo } from 'react'
+import { BufferAttribute, BufferGeometry, Color } from 'three'
 import starVertexShader from '../shaders/stars-shader/vertex.glsl'
 import starFragmentShader from '../shaders/stars-shader/fragment.glsl'
 
 const STAR_COUNT = 1000
 // STAR_RADIUS - should be bigger than the terrain size (of 20x20)
-const STAR_RADIUS = 30
+const STAR_RADIUS = 50
 
 function createStarGeometry(count, radius) {
   const positions = new Float32Array(count * 3)
@@ -30,9 +30,18 @@ function createStarGeometry(count, radius) {
   return geometry
 }
 
-export default function Stars({ count = STAR_COUNT, radius = STAR_RADIUS }) {
+export default function Stars({ color, count = STAR_COUNT, radius = STAR_RADIUS }) {
   const pixelRatio = useThree((state) => state.viewport.dpr)
   const geometry = useMemo(() => createStarGeometry(count, radius), [count, radius])
+  const uniforms = useMemo(() => ({
+    uPixelRatio: { value: pixelRatio },
+    uColor: { value: new Color() },
+  }), [pixelRatio])
+
+  useLayoutEffect(() => {
+    uniforms.uPixelRatio.value = pixelRatio
+    uniforms.uColor.value.set(color)
+  }, [color, pixelRatio, uniforms])
 
   useEffect(() => () => geometry.dispose(), [geometry])
 
@@ -41,7 +50,7 @@ export default function Stars({ count = STAR_COUNT, radius = STAR_RADIUS }) {
       <shaderMaterial
         vertexShader={starVertexShader}
         fragmentShader={starFragmentShader}
-        uniforms={{ uPixelRatio: { value: pixelRatio } }}
+        uniforms={uniforms}
         transparent
         depthWrite={false}
         toneMapped={false}

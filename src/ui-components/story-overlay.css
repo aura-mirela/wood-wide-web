@@ -1,5 +1,5 @@
 .story-overlay {
-    --moonlight: 220 71% 96%;
+    /* --moonlight is set from mainColor */
     position: fixed;
     top: 50%;
     left: 50%;
@@ -94,7 +94,6 @@
 
 .overlay-minimize,
 .overlay-expand {
-    --moonlight: 220 71% 96%;
     z-index: 2;
     pointer-events: auto;
     display: grid;

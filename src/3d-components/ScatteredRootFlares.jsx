@@ -49,6 +49,8 @@ function InstancedRootPart({
     <instancedMesh
       ref={meshRef}
       args={[geometry, material, rootIndices.length]}
+      castShadow
+      receiveShadow
       raycast={null}
     />
   )

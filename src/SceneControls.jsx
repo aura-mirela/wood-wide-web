@@ -1,8 +1,41 @@
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useControls } from 'leva'
 
-export default function SceneControls({ lightPosition, castShadow }) {
+import { TERRAIN_SIZE } from './lib/createTerrainGeometry'
+
+// The ground is 20 across and the moon sits off to one side, so the
+// default ±5 shadow box misses almost every scattered mushroom.
+const SHADOW_EXTENT = TERRAIN_SIZE * 0.8
+const SHADOW_MAP_SIZE = 2048
+
+export default function SceneControls({ mainColor, onMainColorChange, lightPosition, castShadow }) {
+  const lightRef = useRef(null)
+  const { 'main-color': pickedColor } = useControls(
+    { 'main-color': mainColor },
+    { persist: false },
+  )
+
+  useEffect(() => {
+    onMainColorChange(pickedColor)
+  }, [pickedColor, onMainColorChange])
+
+  useLayoutEffect(() => {
+    const light = lightRef.current
+    if (!light) {
+      return
+    }
+
+    const camera = light.shadow.camera
+    camera.left = -SHADOW_EXTENT
+    camera.right = SHADOW_EXTENT
+    camera.top = SHADOW_EXTENT
+    camera.bottom = -SHADOW_EXTENT
+    camera.near = 0.5
+    camera.far = 50
+    camera.updateProjectionMatrix()
+  }, [castShadow])
+
   const fog = useControls('fog', {
-    color: '#1c3668',
     density: { value: 0.075, min: 0, max: 0.15, step: 0.001 },
   })
 
@@ -19,7 +52,7 @@ export default function SceneControls({ lightPosition, castShadow }) {
     <>
       <fogExp2
         attach="fog"
-        color={fog.color}
+        color={pickedColor}
         density={fog.density}
       />
       <ambientLight
@@ -27,10 +60,15 @@ export default function SceneControls({ lightPosition, castShadow }) {
         intensity={ambientLight.intensity}
       />
       <directionalLight
+        ref={lightRef}
         color={directionalLight.color}
         intensity={directionalLight.intensity}
         position={lightPosition}
         castShadow={castShadow}
+        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+        shadow-bias={-0.00015}
+        shadow-normalBias={0.03}
+        shadow-autoUpdate
       />
     </>
   )

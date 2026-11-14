@@ -1,16 +1,23 @@
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
-import { AdditiveBlending, DoubleSide } from 'three'
+import { useLayoutEffect, useMemo, useRef } from 'react'
+import { AdditiveBlending, DoubleSide, Vector3 } from 'three'
 import moonGlowVertexShader from '../shaders/moon-glow-shaders/vertex.glsl'
 import moonGlowFragmentShader from '../shaders/moon-glow-shaders/fragment.glsl'
 import { MOON_POSITION } from './Moon'
 
 const MOON_GLOW_SIZE = 12
 
-export default function Glow() {
+export default function Glow({ color }) {
   const glowRef = useRef(null)
   const materialRef = useRef(null)
-  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), [])
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uColor: { value: new Vector3() },
+  }), [])
+
+  useLayoutEffect(() => {
+    uniforms.uColor.value.set(color[0], color[1], color[2])
+  }, [color, uniforms])
 
   useFrame((state) => {
     if (materialRef.current) {
