@@ -45,18 +45,28 @@ const tiers = {
   },
 }
 
-export function getSceneTier({ isXs, isSm, isMd }) {
+export const sceneTierNames = Object.keys(tiers)
+
+export function getSceneTierName({ isXs, isSm, isMd }) {
   if (isXs) {
-    return tiers.xs
+    return 'xs'
   }
 
   if (isSm) {
-    return tiers.sm
+    return 'sm'
   }
 
   if (isMd) {
-    return tiers.md
+    return 'md'
   }
 
-  return tiers.desktop
+  return 'desktop'
+}
+
+export function sceneTierHasShadows(name) {
+  return tiers[name]?.shadows === true
+}
+
+export function getSceneTier(flags) {
+  return tiers[getSceneTierName(flags)]
 }

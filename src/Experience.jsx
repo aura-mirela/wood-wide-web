@@ -1,12 +1,12 @@
 import { Canvas } from '@react-three/fiber'
-import { useEffect, useMemo, useState, Suspense } from 'react'
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react'
 import { OrbitControls } from '@react-three/drei'
 import Moon, { MOON_POSITION } from './3d-components/Moon'
 import Stars from './3d-components/Stars'
 import SceneControls from './SceneControls'
 import Terrain from './3d-components/Terrain'
 import { useBreakpoints } from './breakpoints/useBreakpoints'
-import { getSceneTier } from './breakpoints/getSceneTier'
+import { getSceneTier, getSceneTierName, sceneTierHasShadows } from './breakpoints/getSceneTier'
 
 export const mainColor = '#1c3668'
 
@@ -115,7 +115,24 @@ export default function Experience({ cameraFocus, onCameraFocus }) {
   const glowColor = useMemo(() => rgbUnits(color), [color])
 
   const { isXs, isSm, isMd, isPortrait } = useBreakpoints()
+  const tierName = getSceneTierName({ isXs, isSm, isMd })
   const tier = getSceneTier({ isXs, isSm, isMd, isPortrait })
+  const [forcedShadowTiers, setForcedShadowTiers] = useState(() => new Set())
+  const shadows = tier.shadows || forcedShadowTiers.has(tierName)
+
+  const handleTierChange = useCallback((name) => {
+    if (sceneTierHasShadows(name)) {
+      return
+    }
+    setForcedShadowTiers((current) => {
+      if (current.has(name)) {
+        return current
+      }
+      const next = new Set(current)
+      next.add(name)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     applyMainColor(color)
@@ -125,13 +142,15 @@ export default function Experience({ cameraFocus, onCameraFocus }) {
     <Canvas
       dpr={tier.dpr}
       camera={tier.camera}
-      shadows={tier.shadows ? 'percentage' : false}
+      shadows={shadows ? 'percentage' : false}
     >
       <SceneControls
         mainColor={mainColor}
         onMainColorChange={setColor}
+        tierName={tierName}
+        onTierChange={handleTierChange}
         lightPosition={moonLightPosition}
-        castShadow={tier.shadows}
+        castShadow={shadows}
       />
       <OrbitControls
         target={[-2, 1, -3.5]}

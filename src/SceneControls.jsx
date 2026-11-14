@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useControls } from 'leva'
 
+import { sceneTierNames } from './breakpoints/getSceneTier'
 import { TERRAIN_SIZE } from './lib/createTerrainGeometry'
 
 // The ground is 20 across and the moon sits off to one side, so the
@@ -8,12 +9,37 @@ import { TERRAIN_SIZE } from './lib/createTerrainGeometry'
 const SHADOW_EXTENT = TERRAIN_SIZE * 0.8
 const SHADOW_MAP_SIZE = 2048
 
-export default function SceneControls({ mainColor, onMainColorChange, lightPosition, castShadow }) {
+export default function SceneControls({
+  mainColor,
+  onMainColorChange,
+  tierName,
+  onTierChange,
+  lightPosition,
+  castShadow,
+}) {
   const lightRef = useRef(null)
+  const tierRef = useRef(tierName)
   const { 'main-color': pickedColor } = useControls(
     { 'main-color': mainColor },
     { persist: false },
   )
+  const { tier: pickedTier } = useControls(
+    {
+      tier: {
+        value: tierName,
+        options: sceneTierNames,
+      },
+    },
+    { persist: false },
+  )
+
+  useEffect(() => {
+    if (pickedTier === tierRef.current) {
+      return
+    }
+    tierRef.current = pickedTier
+    onTierChange(pickedTier)
+  }, [pickedTier, onTierChange])
 
   useEffect(() => {
     onMainColorChange(pickedColor)
