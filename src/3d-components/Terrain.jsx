@@ -10,6 +10,7 @@ import {
 import { createTerrainGeometry } from '../lib/createTerrainGeometry'
 import { scatterObjectsOnTerrain } from '../lib/scatterObjectsOnTerrain'
 import TerrainPBRMaterial from '../materials/TerrainPBRMaterial'
+import ForestHitTargets from './ForestHitTargets'
 import FungalLines from './FungalLines'
 import ScatteredFirTrees from './ScatteredFirTrees'
 import ScatteredMushrooms from './ScatteredMushrooms'
@@ -26,6 +27,8 @@ export default function Terrain({
   mushroomCount,
   bumpMap,
   onCameraFocus,
+  onMushroomClick,
+  onFirClick,
 }) {
   const { isXs, isSm, isMd } = useBreakpoints()
   const myceliumMaxDistance = myceliumMaxDistanceForBreakpoints({ isXs, isSm, isMd })
@@ -74,6 +77,7 @@ export default function Terrain({
   // gives an array of ids of the revealed fungal individuals (this is revealedIds)
   // finds the individual whose mushroomIndices contain the clicked index, then appends that id.
   const revealIndividual = (mushroomIndex) => {
+    onMushroomClick?.()
     const individual = fungalIndividuals.find((candidate) =>
       candidate.mushroomIndices.includes(mushroomIndex),
     )
@@ -135,8 +139,14 @@ export default function Terrain({
       <ScatteredRootFlares placements={treePlacements} rootIndices={rootIndices} />
       <ScatteredMushrooms
         placements={mushroomPlacements}
-        onSelect={revealIndividual}
         restingMushroomIndices={restingMushroomIndices}
+      />
+      <ForestHitTargets
+        mushroomPlacements={mushroomPlacements}
+        firPlacements={treePlacements}
+        rootedFirIndices={rootIndices}
+        onMushroomSelect={revealIndividual}
+        onFirSelect={() => onFirClick?.()}
       />
       <FungalLines
         hubs={connectionHubs}

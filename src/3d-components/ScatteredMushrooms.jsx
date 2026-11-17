@@ -1,14 +1,10 @@
 import { useGLTF } from '@react-three/drei'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import { Matrix4, Object3D } from 'three'
 
-import { TERRAIN_SIZE } from '../lib/createTerrainGeometry'
-import { pickNearestMushroomIndex } from '../lib/pickNearestMushroom'
-
 const MUSHROOM_MODEL_URL = '/models/fly_agaric_mushroom.glb'
 const MUSHROOM_BASE_SCALE = 0.0035
-const MUSHROOM_PICK_MAX_DISTANCE_PX = 40
 const BREATH_AMPLITUDE = 0.4
 const BREATH_SPEED = 2.5
 const RESTING_MUSHROOM_INCREASE_FACTOR = 1
@@ -67,46 +63,7 @@ function InstancedMushroomPart({
   )
 }
 
-function MushroomHitTargets({ placements, onSelect }) {
-  const { camera, size } = useThree()
-
-  const selectAtPointer = (event) => {
-    event.stopPropagation()
-    return pickNearestMushroomIndex(
-      placements,
-      event.pointer,
-      camera,
-      size,
-      MUSHROOM_PICK_MAX_DISTANCE_PX,
-    )
-  }
-
-  return (
-    <mesh
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, 0.02, 0]}
-      onClick={(event) => {
-        const index = selectAtPointer(event)
-        if (index != null) {
-          onSelect(index)
-        }
-      }}
-      onPointerMove={(event) => {
-        const index = selectAtPointer(event)
-        document.body.style.cursor = index != null ? 'pointer' : 'auto'
-      }}
-      onPointerOut={() => {
-        document.body.style.cursor = 'auto'
-      }}
-    >
-      <planeGeometry args={[TERRAIN_SIZE, TERRAIN_SIZE]} />
-      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-    </mesh>
-  )
-}
-
 export default function ScatteredMushrooms({
-  onSelect,
   placements,
   restingMushroomIndices,
 }) {
@@ -147,7 +104,6 @@ export default function ScatteredMushrooms({
           restingMushroomIndices={restingMushroomIndices}
         />
       ))}
-      {onSelect && <MushroomHitTargets placements={placements} onSelect={onSelect} />}
     </>
   )
 }

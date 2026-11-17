@@ -29,7 +29,9 @@
 }
 
 .story-chapter {
-    width: 75%;
+    width: auto;
+    align-self: stretch;
+    margin-inline: 3.75rem;
 }
 .story-chapter h1 {
     font-family: "Grenze Gotisch", serif;
@@ -41,6 +43,18 @@
     font-size: min(17px, 20px);
     text-align: justify;
     white-space: pre-line;
+}
+.story-lead {
+    margin: 0;
+}
+/* .story-prompts {
+    margin-top: 1.5em;
+} */
+.story-prompts p {
+    margin: 0;
+}
+.story-prompts p + p {
+    margin-top: 1.75em;
 }
 .story-chapter-content ul {
     margin: 0.5em 0 0;

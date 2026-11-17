@@ -48,7 +48,18 @@ export default function StoryChapter({ title, body, source, credits }) {
                   {body.note && <p>{body.note}</p>}
                 </>
               )
-            : body}
+            : body?.prompts
+              ? (
+                  <>
+                    {/* <p className="story-lead">{body.text}</p> */}
+                    <div className="story-prompts">
+                      {body.prompts.map((prompt) => (
+                        <p key={prompt}>{prompt}</p>
+                      ))}
+                    </div>
+                  </>
+                )
+              : body}
         <Attribution source={source} credits={credits} />
       </div>
     </div>

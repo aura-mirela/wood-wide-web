@@ -2,7 +2,7 @@ import { Vector3 } from 'three'
 
 const mushroomPoint = new Vector3()
 
-export function pickNearestMushroomIndex(
+export function pickNearestMushroomHit(
   placements,
   pointerNdc,
   camera,
@@ -40,5 +40,31 @@ export function pickNearestMushroomIndex(
     }
   }
 
-  return bestIndex === -1 ? null : bestIndex
+  if (bestIndex === -1) {
+    return null
+  }
+
+  return {
+    index: bestIndex,
+    distanceSq: closestSquaredPixelDistance,
+    radiusPx: maxDistancePx,
+  }
+}
+
+export function pickNearestMushroomIndex(
+  placements,
+  pointerNdc,
+  camera,
+  size,
+  maxDistancePx = 40,
+  heightOffset = 0.18,
+) {
+  return pickNearestMushroomHit(
+    placements,
+    pointerNdc,
+    camera,
+    size,
+    maxDistancePx,
+    heightOffset,
+  )?.index ?? null
 }

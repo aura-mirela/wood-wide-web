@@ -109,7 +109,7 @@ function lightPositionFromMoon(moonPosition, distance) {
 
 const moonLightPosition = lightPositionFromMoon(MOON_POSITION, MOON_LIGHT_DISTANCE)
 
-export default function Experience({ cameraFocus, onCameraFocus }) {
+export default function Experience({ cameraFocus, onCameraFocus, onMushroomClick, onFirClick }) {
   const [color, setColor] = useState(mainColor)
   const moonColor = useMemo(() => withLightness(color, LIGHTNESS), [color])
   const glowColor = useMemo(() => rgbUnits(color), [color])
@@ -172,6 +172,8 @@ export default function Experience({ cameraFocus, onCameraFocus }) {
           bumpMap={tier.bumpMap}
           cameraFocus={cameraFocus}
           onCameraFocus={onCameraFocus}
+          onMushroomClick={onMushroomClick}
+          onFirClick={onFirClick}
          />
       </Suspense>
     </Canvas>

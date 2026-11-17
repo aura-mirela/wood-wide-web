@@ -1,9 +1,16 @@
 import { useState } from 'react'
-import { chapters } from '../story/storyText'
+import { enterTheForest, fungalIndividual, meetTheFirs, meetTheMushroom } from '../story/storyText'
 import StoryChapter from './StoryChapter'
 import NextButton from './NextButton'
 import PreviousButton from './PreviousButton'
 import './story-overlay.css'
+
+const stories = {
+  enter: enterTheForest,
+  fir: meetTheFirs,
+  mushroom: meetTheMushroom,
+  fungal: fungalIndividual,
+}
 
 const svgProps = {
   xmlns: 'http://www.w3.org/2000/svg',
@@ -48,32 +55,83 @@ function ExpandButton({ onClick }) {
   )
 }
 
-export default function StoryOverlay() {
-  const [chapterIndex, setChapterIndex] = useState(0)
-  const [minimized, setMinimized] = useState(false)
+function previousPage(page, firDiscovered) {
+  if (page === 'fungal') {
+    return 'mushroom'
+  }
+  if (page === 'mushroom') {
+    return firDiscovered ? 'fir' : 'enter'
+  }
+  if (page === 'fir') {
+    return 'enter'
+  }
+  return null
+}
 
-  const onNextChapter = () => setChapterIndex(
-    chapterIndex + 1 < chapters.length ? chapterIndex + 1 : 0
-  )
+function nextPage(page, { firDiscovered, mushroomDiscovered }) {
+  if (page === 'mushroom') {
+    return 'fungal'
+  }
+  if (page === 'fir') {
+    return mushroomDiscovered ? 'mushroom' : null
+  }
+  if (page === 'enter') {
+    if (firDiscovered) {
+      return 'fir'
+    }
+    if (mushroomDiscovered) {
+      return 'mushroom'
+    }
+  }
+  return null
+}
 
-  const onPreviousChapter = () => setChapterIndex(
-    chapterIndex - 1 >= 0 ? chapterIndex - 1 : chapters.length - 1
-  )
+export default function StoryOverlay({ mushroomClickId = 0, firClickId = 0 }) {
+  const [page, setPage] = useState('enter')
+  const [minimizedOverlay, setMinimizedOverlay] = useState(false)
+  const [firDiscovered, setFirDiscovered] = useState(false)
+  const [mushroomDiscovered, setMushroomDiscovered] = useState(false)
+  const [seenMushroomClickId, setSeenMushroomClickId] = useState(mushroomClickId)
+  const [seenFirClickId, setSeenFirClickId] = useState(firClickId)
 
-  if (minimized) {
-    return <ExpandButton onClick={() => setMinimized(false)} />
+  // A further click on the species already open leaves the overlay as it is.
+  if (mushroomClickId !== seenMushroomClickId) {
+    setSeenMushroomClickId(mushroomClickId)
+    if (!(page === 'mushroom' && !minimizedOverlay)) {
+      setMushroomDiscovered(true)
+      setPage('mushroom')
+      setMinimizedOverlay(false)
+    }
+  }
+
+  if (firClickId !== seenFirClickId) {
+    setSeenFirClickId(firClickId)
+    if (!(page === 'fir' && !minimizedOverlay)) {
+      setFirDiscovered(true)
+      setPage('fir')
+      setMinimizedOverlay(false)
+    }
+  }
+
+  const discovery = { firDiscovered, mushroomDiscovered }
+  const previousId = previousPage(page, firDiscovered)
+  const nextId = nextPage(page, discovery)
+  const story = stories[page]
+
+  if (minimizedOverlay) {
+    return <ExpandButton onClick={() => setMinimizedOverlay(false)} />
   }
 
   return (
     <div className="story-overlay">
-      <MinimizeButton onClick={() => setMinimized(true)} />
-      <NextButton onClick={onNextChapter} />
-      <PreviousButton onClick={onPreviousChapter} />
+      <MinimizeButton onClick={() => setMinimizedOverlay(true)} />
+      {nextId && <NextButton onClick={() => setPage(nextId)} />}
+      {previousId && <PreviousButton onClick={() => setPage(previousId)} />}
       <StoryChapter
-        title={chapters[chapterIndex].title}
-        body={chapters[chapterIndex].body}
-        source={chapters[chapterIndex].source}
-        credits={chapters[chapterIndex].credits}
+        title={story.title}
+        body={story.body}
+        source={story.source}
+        credits={story.credits}
       />
     </div>
   )

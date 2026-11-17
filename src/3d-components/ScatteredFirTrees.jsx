@@ -3,7 +3,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Matrix4, Object3D } from 'three'
 
 const TREE_MODEL_URL = '/models/fir_tree.glb'
-const ROOTED_FIR_SCALE = 1.2
+export const ROOTED_FIR_SCALE = 1.2
 
 // Function that creats an instance mesh for the tree part (part = trunk and foliage)
 function InstancedTreePart({ geometry, material, localMatrix, placements, rootedFirIndices }) {
