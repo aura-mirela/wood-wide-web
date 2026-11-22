@@ -9,11 +9,11 @@ export default function AppDemo() {
     const [color, setColor] = useState('red')
 
     
-    // todo: change color to a random color from the array
     const changeColor = () => {
-        const colors = ['green', 'red', 'blue', 'yellow', 'purple', 'orange', 'pink', 'brown', 'gray']
-        console.log(colors[Math.floor(Math.random() * colors.length)])
-        setColor(colors[Math.floor(Math.random() * colors.length)])
+      const colors = ['green', 'red', 'blue', 'yellow', 'purple', 'orange', 'pink', 'brown', 'gray']
+      const nextColor = colors[Math.floor(Math.random() * colors.length)]
+      console.log(nextColor)
+      setColor(nextColor)
     }
 
   return (
