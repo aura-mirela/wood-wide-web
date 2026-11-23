@@ -13,7 +13,7 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <AppDemo />
-    {/* <App /> */}
+    {/* <AppDemo /> */}
+    <App />
   </StrictMode>,
 )
