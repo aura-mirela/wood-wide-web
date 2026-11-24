@@ -6,9 +6,9 @@
     transform: translate(-50%, -50%);
     width: 75%;
     height: 75%;
-    /* border: 1px solid white; */
     padding: 16px;
     box-sizing: border-box;
+    pointer-events: none;
 }
 
 .demo-controls button {
@@ -21,6 +21,7 @@
     border-radius: 10px;
     cursor: pointer;
     transition: all 0.5s ease;
+    pointer-events: auto;
     &:hover {
         background-color: white;
         color: black;
