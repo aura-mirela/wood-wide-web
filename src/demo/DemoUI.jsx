@@ -1,10 +1,17 @@
-import DemoControls from './DemoControls'
 import './demo-style.css'
 
-export default function DemoUI({isScaling, setIsScaling, changeColor}) {
+export default function DemoUI({ isScaling, setIsScaling, changeColor }) {
   return (
     <div className="demo-ui">
-      <DemoControls isScaling={isScaling} setIsScaling={setIsScaling} changeColor={changeColor} />
+      <div className="demo-controls">
+        <button onClick={() => setIsScaling(!isScaling)}>
+          {isScaling ? 'Stop Scaling' : 'Start Scaling'}
+        </button>
+
+        <button onClick={changeColor}>
+          Change Color
+        </button>
+      </div>
     </div>
   )
 }
